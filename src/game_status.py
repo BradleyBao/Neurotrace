@@ -5,7 +5,7 @@ This module provides helper functions to manage the game status in the Neurotrac
 import pyxel, src.settings, PyxelUniversalFont as pul
 class GameStatus:
     def __init__(self):
-        self.status = 0 # Init Game Status
+        self.status = 1 # Init Game Status
         self.previous_status = 0    # Init Previous Game Status 
         self.initFonts()
     def is_menu(self):
