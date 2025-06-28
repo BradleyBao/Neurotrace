@@ -1,5 +1,5 @@
 import pyxel, PyxelUniversalFont as pul
-from src import settings, game_status, player
+from src import settings, game_status, player, map
 
 class Neurotrace:
     
@@ -12,6 +12,7 @@ class Neurotrace:
         # ! Load Resources first before map and player
         self.initResources()
         self.initPlayer()
+        self.initMap()
         
 
     def initHelpers(self):
@@ -25,6 +26,9 @@ class Neurotrace:
 
     def initPlayer(self):
         self.player = player.Player()
+
+    def initMap(self):
+        self.map = map.Map()
 
     # === END OF INIT AREA === 
 
@@ -41,7 +45,10 @@ class Neurotrace:
             self.GAME_STATUS.showGameTitle()
 
         if self.GAME_STATUS.is_playing():
+            
+            self.map.drawMap()
             self.player.playerStand()
+            
     
 if __name__ == "__main__":
     game = Neurotrace()
