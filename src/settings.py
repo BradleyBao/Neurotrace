@@ -11,6 +11,10 @@ CURSOR = True
 # Frame Rate
 FPS = 60
 
+# Camera Settings
+CAMERA_DEADZONE = 16  # Reduced deadzone for more responsive camera
+CAMERA_SMOOTHING = 0.2  # Increased smoothing for less jitter
+
 # Player Physics Settings
 PLAYER_SPEED = 1
 PLAYER_JUMP_SPEED = -3

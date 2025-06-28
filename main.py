@@ -1,5 +1,5 @@
 import pyxel, PyxelUniversalFont as pul
-from src import settings, game_status, player, map
+from src import settings, game_status, player, map, camera
 
 class Neurotrace:
     
@@ -31,6 +31,7 @@ class Neurotrace:
     def initMap(self):
         self.level = 0
         self.map = map.Map()
+        self.camera = camera.Camera()
 
     def loadMap(self, level = 0):
         self.player.resetPlayerPos()
@@ -62,12 +63,17 @@ class Neurotrace:
         if pyxel.btnp(pyxel.KEY_CTRL):
             self.player.dash()
 
+        # Update camera to follow player
+        map_width = self.map.structure[self.level]["mapWH"][0]
+        self.camera.update(self.player.x + 8, self.player.y + 8, map_width)
+        self.camera_x, self.camera_y = self.camera.get_offset()
+
         # Fire control
         if pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT):
-            self.player.fire()
+            self.player.fire(self.camera_x)
 
         # Update player physics and animations
-        self.player.update(self.level)
+        self.player.update(self.level, self.camera_x)
 
     def draw(self):
         pyxel.cls(0)
@@ -75,8 +81,8 @@ class Neurotrace:
             self.GAME_STATUS.showGameTitle()
 
         if self.GAME_STATUS.is_playing():
-            self.map.drawMap(self.level)
-            self.player.draw()
+            self.map.drawMap(self.level, self.camera_x)
+            self.player.draw(self.camera_x)
             
     
 if __name__ == "__main__":

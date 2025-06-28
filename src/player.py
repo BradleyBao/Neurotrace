@@ -25,6 +25,7 @@ class Player:
         self.dash_cooldown = 0
         self.dash_cooldown_max = 20  # frames
         self.dash_remaining = 0
+        self.dash_direction = 1  # 1 for right, -1 for left
         # Weapon system
         self.weapon_offset = 5  # 1/3 of 16px
         # 8 directions: [L, R, R45U, L45U, L45D, R45D, D, U]
@@ -54,7 +55,6 @@ class Player:
         self.is_firing = False
         self.fire_timer = 0
         self.fire_duration = 6  # frames (about 100ms at 60fps)
-        self.fire_direction_idx = 1
         self.fire_angle = 0
         self.fire_line = None  # (x0, y0, x1, y1)
         # Load animation frames
@@ -70,11 +70,13 @@ class Player:
         if not self.is_dashing:
             self.x -= self.speed
         self.is_moving = True
+        self.dash_direction = -1
 
     def moveRight(self):
         if not self.is_dashing:
             self.x += self.speed
         self.is_moving = True
+        self.dash_direction = 1
 
     def jump(self):
         if not self.is_jumping:
@@ -87,25 +89,24 @@ class Player:
             self.dash_remaining = self.dash_distance
             self.dash_cooldown = self.dash_cooldown_max
 
-    def fire(self):
+    def fire(self, camera_x=0):
         if not self.is_firing:
             self.is_firing = True
             self.fire_timer = self.fire_duration
-            self.fire_direction_idx = self.get_weapon_direction_index()
-            # Store the angle for the shot
-            player_cx = self.x + 8
-            player_cy = self.y + 8
+            # Store the angle for the shot (for the bullet line only)
+            player_screen_x = self.x - camera_x + 8
+            player_screen_y = self.y + 8
             mx = pyxel.mouse_x
             my = pyxel.mouse_y
-            self.fire_angle = math.atan2(my - player_cy, mx - player_cx)
+            self.fire_angle = math.atan2(my - player_screen_y, mx - player_screen_x)
             # Calculate the line end (blocked by floor)
-            self.fire_line = self.calculate_fire_line(self.fire_angle)
+            self.fire_line = self.calculate_fire_line(self.fire_angle, camera_x)
 
-    def update(self, level=0):
+    def update(self, level=0, camera_x=0):
         # Mouse-based facing
         player_cx = self.x + 8
         player_cy = self.y + 8
-        mouse_x = pyxel.mouse_x
+        mouse_x = pyxel.mouse_x + camera_x
         mouse_y = pyxel.mouse_y
         dx = mouse_x - player_cx
         # Facing is right if mouse is to the right, else left
@@ -113,7 +114,7 @@ class Player:
         # Dash logic
         if self.is_dashing:
             dash_step = min(self.dash_speed, self.dash_remaining)
-            self.x += dash_step * self.facing_direction
+            self.x += dash_step * self.dash_direction
             self.dash_remaining -= dash_step
             if self.dash_remaining <= 0:
                 self.is_dashing = False
@@ -141,20 +142,20 @@ class Player:
             self.animation_frame = 0
             self.animation_timer = 0
 
-    def calculate_fire_line(self, angle):
+    def calculate_fire_line(self, angle, camera_x=0):
         # Start at gun muzzle
         player_cx = self.x + 8
         player_cy = self.y + 8
         muzzle_x = int(player_cx + math.cos(angle) * 8)
         muzzle_y = int(player_cy + math.sin(angle) * 8)
-        # Step along the line until hit floor or screen edge
-        max_length = 128  # screen size
+        # Step along the line until hit floor or map edge
+        max_length = 256  # Use map width instead of screen size
         step = 2
         for l in range(0, max_length, step):
             tx = int(muzzle_x + math.cos(angle) * l)
             ty = int(muzzle_y + math.sin(angle) * l)
-            # Check screen bounds
-            if tx < 0 or tx >= 128 or ty < 0 or ty >= 128:
+            # Check map bounds (world coordinates)
+            if tx < 0 or tx >= 256 or ty < 0 or ty >= 128:
                 return (muzzle_x, muzzle_y, tx, ty)
             # Check collision with floors
             for floor in self.structure[self.level]["mapFloor"]:
@@ -198,80 +199,88 @@ class Player:
         self.dash_cooldown = 0
         self.dash_remaining = 0
 
-    def get_weapon_direction_index(self):
+    def get_weapon_direction_index(self, camera_x=0):
         # 8 directions: [L, R, R45U, L45U, L45D, R45D, D, U]
-        player_cx = self.x + 8
-        player_cy = self.y + 8
+        player_screen_x = self.x - camera_x + 8
+        player_screen_y = self.y + 8
         mx = pyxel.mouse_x
         my = pyxel.mouse_y
-        angle = math.degrees(math.atan2(my - player_cy, mx - player_cx))
-        # Map angle to -180 to 180
-        # Map to 8 directions
-        # Sectors: (centered on L, R, R45U, L45U, L45D, R45D, D, U)
-        # L: 157.5 to -157.5
-        # L45U: 112.5 to 157.5
-        # U: 67.5 to 112.5
-        # R45U: 22.5 to 67.5
-        # R: -22.5 to 22.5
-        # R45D: -67.5 to -22.5
-        # D: -112.5 to -67.5
-        # L45D: -157.5 to -112.5
-        if angle > 157.5 or angle <= -157.5:
+        angle = math.degrees(math.atan2(my - player_screen_y, mx - player_screen_x))
+        if angle < 0:
+            angle += 360
+        if 157.5 <= angle < 202.5:
             return 0  # Left
-        elif -22.5 < angle <= 22.5:
+        elif angle < 22.5 or angle >= 337.5:
             return 1  # Right
-        elif 22.5 < angle <= 67.5:
+        elif 22.5 <= angle < 67.5:
             return 5  # Right 45 Up
-        elif 67.5 < angle <= 112.5:
-            return 6  # Up
-        elif 112.5 < angle <= 157.5:
+        elif 112.5 <= angle < 157.5:
             return 4  # Left 45 Up
-        elif -67.5 < angle <= -22.5:
-            return 2  # Right 45 Down
-        elif -112.5 < angle <= -67.5:
-            return 7  # Down
-        elif -157.5 < angle <= -112.5:
+        elif 202.5 <= angle < 247.5:
             return 3  # Left 45 Down
+        elif 292.5 <= angle < 337.5:
+            return 2  # Right 45 Down
+        elif 247.5 <= angle < 292.5:
+            return 7  # Down
+        elif 67.5 <= angle < 112.5:
+            return 6  # Up
         else:
             return 1  # Default to Right
 
-    def draw_weapon(self):
+    def draw_weapon(self, x_offset=0, camera_x=0):
+        player_screen_x = self.x - x_offset + 8
+        player_screen_y = self.y + 8
+        mx = pyxel.mouse_x
+        my = pyxel.mouse_y
+        angle = math.atan2(my - player_screen_y, mx - player_screen_x)
+        angle_deg = math.degrees(angle)
+        idx = self.get_weapon_direction_index_from_angle(angle_deg)
         if self.is_firing:
-            idx = self.fire_direction_idx
             sx, sy = self.weapon_fire_sprites[idx]
         else:
-            idx = self.get_weapon_direction_index()
             sx, sy = self.weapon_sprites[idx]
-        # Weapon position: offset from player center, in direction of mouse
-        player_cx = self.x + 8
-        player_cy = self.y + 8
-        if self.is_firing:
-            angle = self.fire_angle
-        else:
-            mx = pyxel.mouse_x
-            my = pyxel.mouse_y
-            angle = math.atan2(my - player_cy, mx - player_cx)
-        wx = int(player_cx + math.cos(angle) * 8 - self.weapon_w // 2)
-        wy = int(player_cy + math.sin(angle) * 8 - self.weapon_h // 2)
+        wx = int(player_screen_x + math.cos(angle) * 8 - self.weapon_w // 2)
+        wy = int(player_screen_y + math.sin(angle) * 8 - self.weapon_h // 2)
         pyxel.blt(wx, wy, 0, sx, sy, self.weapon_w, self.weapon_h, 14)
-        # Draw shooting line if firing
         if self.is_firing and self.fire_line:
             x0, y0, x1, y1 = self.fire_line
-            pyxel.line(x0, y0, x1, y1, 7)  # color 7 (white)
+            pyxel.line(x0 - x_offset, y0, x1 - x_offset, y1, 8)
 
-    def draw(self):
+    def get_weapon_direction_index_from_angle(self, angle):
+        if angle < 0:
+            angle += 360
+        if 157.5 <= angle < 202.5:
+            return 0  # Left
+        elif angle < 22.5 or angle >= 337.5:
+            return 1  # Right
+        elif 22.5 <= angle < 67.5:
+            return 5  # Right 45 Up
+        elif 112.5 <= angle < 157.5:
+            return 4  # Left 45 Up
+        elif 202.5 <= angle < 247.5:
+            return 3  # Left 45 Down
+        elif 292.5 <= angle < 337.5:
+            return 2  # Right 45 Down
+        elif 247.5 <= angle < 292.5:
+            return 7  # Down
+        elif 67.5 <= angle < 112.5:
+            return 6  # Up
+        else:
+            return 1  # Default to Right
+
+    def draw(self, x_offset=0, camera_x=0):
         if self.is_moving:
             # Draw walking animation
             if self.facing_direction == 1:  # Right
                 frame = self.walk_right[self.animation_frame]
             else:  # Left
                 frame = self.walk_left[self.animation_frame]
-            pyxel.blt(self.x, self.y, 0, frame[0], frame[1], 16, 16, 14)
+            pyxel.blt(self.x - x_offset, self.y, 0, frame[0], frame[1], 16, 16, 14)
         else:
             # Draw standing frame based on facing direction
             if self.facing_direction == 1:  # Right
-                pyxel.blt(self.x, self.y, 0, self.stand_frame_right[0], self.stand_frame_right[1], 16, 16, 14)
+                pyxel.blt(self.x - x_offset, self.y, 0, self.stand_frame_right[0], self.stand_frame_right[1], 16, 16, 14)
             else:  # Left
-                pyxel.blt(self.x, self.y, 0, self.stand_frame_left[0], self.stand_frame_left[1], 16, 16, 14)
+                pyxel.blt(self.x - x_offset, self.y, 0, self.stand_frame_left[0], self.stand_frame_left[1], 16, 16, 14)
         # Draw weapon after player
-        self.draw_weapon()
+        self.draw_weapon(x_offset, camera_x)
