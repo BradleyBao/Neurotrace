@@ -1,5 +1,6 @@
 import pyxel, PyxelUniversalFont as pul
 from src import settings, game_status, player, map, camera
+from src.enemy import create_enemy
 
 class Neurotrace:
     
@@ -32,6 +33,11 @@ class Neurotrace:
         self.level = 0
         self.map = map.Map()
         self.camera = camera.Camera()
+        # Spawn enemies
+        self.enemies = []
+        for enemy_info in self.map.structure[self.level]["enemies"]:
+            type_index, x, y = enemy_info
+            self.enemies.append(create_enemy(type_index, x, y, self.level))
 
     def loadMap(self, level = 0):
         self.player.resetPlayerPos()
@@ -75,6 +81,10 @@ class Neurotrace:
         # Update player physics and animations
         self.player.update(self.level, self.camera_x)
 
+        # Update enemies
+        for enemy in self.enemies:
+            enemy.update(self.player, self.camera_x)
+
     def draw(self):
         pyxel.cls(0)
         if self.GAME_STATUS.is_menu():
@@ -83,6 +93,8 @@ class Neurotrace:
         if self.GAME_STATUS.is_playing():
             self.map.drawMap(self.level, self.camera_x)
             self.player.draw(self.camera_x)
+            for enemy in self.enemies:
+                enemy.draw(self.camera_x)
             
     
 if __name__ == "__main__":

@@ -149,13 +149,13 @@ class Player:
         muzzle_x = int(player_cx + math.cos(angle) * 8)
         muzzle_y = int(player_cy + math.sin(angle) * 8)
         # Step along the line until hit floor or map edge
-        max_length = 256  # Use map width instead of screen size
+        max_length = 2560  # Use map width instead of screen size
         step = 2
         for l in range(0, max_length, step):
             tx = int(muzzle_x + math.cos(angle) * l)
             ty = int(muzzle_y + math.sin(angle) * l)
             # Check map bounds (world coordinates)
-            if tx < 0 or tx >= 256 or ty < 0 or ty >= 128:
+            if tx < 0 or tx >= 2560 or ty < 0 or ty >= 128:
                 return (muzzle_x, muzzle_y, tx, ty)
             # Check collision with floors
             for floor in self.structure[self.level]["mapFloor"]:
