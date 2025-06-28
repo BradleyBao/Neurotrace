@@ -85,6 +85,15 @@ class Neurotrace:
         for enemy in self.enemies:
             enemy.update(self.player, self.camera_x)
 
+        # Check for collisions
+        if self.player.is_firing and self.player.fire_line:
+            x0, y0, x1, y1 = self.player.fire_line
+            for enemy in self.enemies:
+                if enemy.alive:
+                    ex, ey = enemy.x, enemy.y
+                    if self.line_intersects_rect(x0, y0, x1, y1, ex, ey, 16, 16):
+                        enemy.take_damage(1)
+
     def draw(self):
         pyxel.cls(0)
         if self.GAME_STATUS.is_menu():
@@ -96,7 +105,29 @@ class Neurotrace:
             for enemy in self.enemies:
                 enemy.draw(self.camera_x, target=self.player)
             
-    
+    def line_intersects_rect(self, x0, y0, x1, y1, rx, ry, rw, rh):
+        # Simple AABB vs line segment check
+        # Check if either endpoint is inside the rect
+        if rx <= x0 <= rx+rw and ry <= y0 <= ry+rh:
+            return True
+        if rx <= x1 <= rx+rw and ry <= y1 <= ry+rh:
+            return True
+        # Check for intersection with each edge
+        def ccw(A, B, C):
+            return (C[1]-A[1]) * (B[0]-A[0]) > (B[1]-A[1]) * (C[0]-A[0])
+        def intersect(A,B,C,D):
+            return ccw(A,C,D) != ccw(B,C,D) and ccw(A,B,C) != ccw(A,B,D)
+        rect_edges = [
+            ((rx,ry), (rx+rw,ry)),
+            ((rx+rw,ry), (rx+rw,ry+rh)),
+            ((rx+rw,ry+rh), (rx,ry+rh)),
+            ((rx,ry+rh), (rx,ry)),
+        ]
+        for edge in rect_edges:
+            if intersect((x0,y0), (x1,y1), edge[0], edge[1]):
+                return True
+        return False
+
 if __name__ == "__main__":
     game = Neurotrace()
     game.run()

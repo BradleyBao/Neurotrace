@@ -30,8 +30,11 @@ class BaseEnemy:
         self.fire_angle = 0
         self.fire_line = None
         # AI State
-        self.state = "patrol"
-        self.state_timer = 0
+        self.visual_state = "normal"  # normal, damage, defeated
+        self.visual_state_timer = 0
+        self.state = "patrol"  # AI state: patrol, chase, attack, retreat
+        self.alive = True
+        self.hp = 10  # Default, override in subclasses
         self.patrol_origin = x
         self.patrol_range = 32 + random.randint(0, 32)
         self.patrol_dir = 1 if random.random() < 0.5 else -1
@@ -46,6 +49,10 @@ class BaseEnemy:
         # Default sprite locations (can be overridden in subclasses)
         self.sprite_left = (0, 0)
         self.sprite_right = (16, 0)
+        self.sprite_damage_left = (32, 0)
+        self.sprite_damage_right = (48, 0)
+        self.sprite_defeated_left = (64, 0)
+        self.sprite_defeated_right = (80, 0)
         self.weapon_sprites = [
             (0, 128),   # Left
             (8, 128),   # Right
@@ -57,7 +64,26 @@ class BaseEnemy:
             (24, 136),  # Up
         ]
 
+    def take_damage(self, amount):
+        if self.visual_state == "defeated":
+            return
+        self.hp -= amount
+        if self.hp <= 0:
+            self.visual_state = "defeated"
+            self.alive = False
+        else:
+            self.visual_state = "damage"
+            self.visual_state_timer = 10  # Show damage sprite for 10 frames
+
     def update(self, player, camera_x=0):
+        if self.visual_state == "damage":
+            self.visual_state_timer -= 1
+            if self.visual_state_timer <= 0 and self.hp > 0:
+                self.visual_state = "normal"
+        if self.visual_state == "defeated":
+            return
+        if not self.alive:
+            return
         distance_to_player = abs(player.x - self.x)
         if self.state == "patrol":
             if distance_to_player < 80:
@@ -175,12 +201,15 @@ class BaseEnemy:
             self.is_jumping = True
 
     def draw(self, x_offset=0, target=None):
-        if self.facing_direction == 1:
-            sx, sy = self.sprite_right
+        if self.visual_state == "defeated":
+            sx, sy = self.sprite_defeated_right if self.facing_direction == 1 else self.sprite_defeated_left
+        elif self.visual_state == "damage":
+            sx, sy = self.sprite_damage_right if self.facing_direction == 1 else self.sprite_damage_left
         else:
-            sx, sy = self.sprite_left
+            sx, sy = self.sprite_right if self.facing_direction == 1 else self.sprite_left
         pyxel.blt(self.x - x_offset, self.y, 0, sx, sy, 16, 16, 14)
-        self.draw_weapon(x_offset, target)
+        if self.visual_state != "defeated":
+            self.draw_weapon(x_offset, target)
 
     def draw_weapon(self, x_offset=0, target=None):
         # Use player weapon logic for aiming and facing
@@ -227,11 +256,16 @@ class BaseEnemy:
 class RobotEnemy0(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(0, x, y, level)
-        self.miss_chance = 0.1
+        self.miss_chance = 0.75
         self.weapon = "Laser Blaster"
         self.special_ability = "Shield (placeholder)"
+        self.hp = 20
         self.sprite_left = (0, 16)
         self.sprite_right = (16, 16)
+        self.sprite_damage_left = (32, 16)
+        self.sprite_damage_right = (48, 16)
+        self.sprite_defeated_left = (64, 16)
+        self.sprite_defeated_right = (80, 16)
         self.weapon_sprites = [
             (0, 128),   # Left
             (8, 128),   # Right
@@ -245,11 +279,16 @@ class RobotEnemy0(BaseEnemy):
 class RobotEnemy1(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(1, x, y, level)
-        self.miss_chance = 0.2
+        self.miss_chance = 0.7
         self.weapon = "Pulse Rifle"
         self.special_ability = "EMP (placeholder)"
+        self.hp = 18
         self.sprite_left = (0, 96)
         self.sprite_right = (16, 96)
+        self.sprite_damage_left = (32, 96)
+        self.sprite_damage_right = (48, 96)
+        self.sprite_defeated_left = (64, 96)
+        self.sprite_defeated_right = (80, 96)
         self.weapon_sprites = [
             (0, 128),   # Left
             (8, 128),   # Right
@@ -263,11 +302,16 @@ class RobotEnemy1(BaseEnemy):
 class RobotEnemy2(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(2, x, y, level)
-        self.miss_chance = 0.15
+        self.miss_chance = 0.4
         self.weapon = "Rocket Arm"
         self.special_ability = "Rocket Jump (placeholder)"
+        self.hp = 25
         self.sprite_left = (0, 112)
         self.sprite_right = (16, 112)
+        self.sprite_damage_left = (32, 112)
+        self.sprite_damage_right = (48, 112)
+        self.sprite_defeated_left = (64, 112)
+        self.sprite_defeated_right = (80, 112)
         self.weapon_sprites = [
             (0, 128),   # Left
             (8, 128),   # Right
@@ -282,11 +326,16 @@ class RobotEnemy2(BaseEnemy):
 class HumanEnemy0(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(3, x, y, level)
-        self.miss_chance = 0.3
+        self.miss_chance = 0.8
         self.weapon = "Pistol"
         self.special_ability = "Roll (placeholder)"
+        self.hp = 8
         self.sprite_left = (0, 32)
         self.sprite_right = (16, 32)
+        self.sprite_damage_left = (32, 32)
+        self.sprite_damage_right = (48, 32)
+        self.sprite_defeated_left = (64, 32)
+        self.sprite_defeated_right = (80, 32)
         self.weapon_sprites = [
             (0, 128),   # Left
             (8, 128),   # Right
@@ -300,11 +349,16 @@ class HumanEnemy0(BaseEnemy):
 class HumanEnemy1(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(4, x, y, level)
-        self.miss_chance = 0.5
+        self.miss_chance = 0.6
         self.weapon = "Shotgun"
         self.special_ability = "Sprint (placeholder)"
+        self.hp = 10
         self.sprite_left = (0, 46)
         self.sprite_right = (16, 46)
+        self.sprite_damage_left = (32, 46)
+        self.sprite_damage_right = (48, 46)
+        self.sprite_defeated_left = (64, 46)
+        self.sprite_defeated_right = (80, 46)
         self.weapon_sprites = [
             (0, 128),   # Left
             (8, 128),   # Right
@@ -318,11 +372,16 @@ class HumanEnemy1(BaseEnemy):
 class HumanEnemy2(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(5, x, y, level)
-        self.miss_chance = 0.4
+        self.miss_chance = 0.3
         self.weapon = "SMG"
         self.special_ability = "Grenade (placeholder)"
+        self.hp = 12
         self.sprite_left = (0, 64)
         self.sprite_right = (16, 64)
+        self.sprite_damage_left = (32, 64)
+        self.sprite_damage_right = (48, 64)
+        self.sprite_defeated_left = (64, 64)
+        self.sprite_defeated_right = (80, 64)
         self.weapon_sprites = [
             (0, 128),   # Left
             (8, 128),   # Right
@@ -336,11 +395,16 @@ class HumanEnemy2(BaseEnemy):
 class HumanEnemy3(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(6, x, y, level)
-        self.miss_chance = 0.6
+        self.miss_chance = 0.1
         self.weapon = "Sniper"
         self.special_ability = "Camouflage (placeholder)"
+        self.hp = 6
         self.sprite_left = (0, 80)
         self.sprite_right = (16, 80)
+        self.sprite_damage_left = (32, 80)
+        self.sprite_damage_right = (48, 80)
+        self.sprite_defeated_left = (64, 80)
+        self.sprite_defeated_right = (80, 80)
         self.weapon_sprites = [
             (0, 128),   # Left
             (8, 128),   # Right

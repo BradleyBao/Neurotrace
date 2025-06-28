@@ -5,7 +5,7 @@ STRUCTURE = {
         "mapWH": (128*4, 128),
         "mapFloor": [
             (0, 112, 128*4, 16),  # Main floor: (x, y, width, height)
-            # (0, 80, 64, 16),    # Platform 1
+            (150, 40, 75, 16),    # Platform 1
             # (80, 80, 48, 16),   # Platform 2
         ],
         "enemies": [
