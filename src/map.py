@@ -10,3 +10,4 @@ class Map():
                    self.structure[level]["mapUV"][1], 
                    self.structure[level]["mapWH"][0], 
                    self.structure[level]["mapWH"][1], 0)
+        

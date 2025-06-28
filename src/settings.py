@@ -10,3 +10,9 @@ WINDOW_HEIGHT = 128
 CURSOR = True
 # Frame Rate
 FPS = 60
+
+# Player Physics Settings
+PLAYER_SPEED = 1
+PLAYER_JUMP_SPEED = -3
+GRAVITY = 0.2
+ANIMATION_SPEED = 8  # Frames per animation cycle
