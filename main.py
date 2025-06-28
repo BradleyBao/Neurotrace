@@ -58,6 +58,14 @@ class Neurotrace:
         if pyxel.btnp(pyxel.KEY_SPACE):
             self.player.jump()
 
+        # Dash control
+        if pyxel.btnp(pyxel.KEY_CTRL):
+            self.player.dash()
+
+        # Fire control
+        if pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT):
+            self.player.fire()
+
         # Update player physics and animations
         self.player.update(self.level)
 
