@@ -20,18 +20,8 @@ class BaseEnemy:
         self.facing_direction = 1
         self.animation_frame = 0
         self.animation_timer = 0
-        # Weapon system
+        # Weapon system (weapon_sprites will be set in subclasses)
         self.weapon_offset = 5
-        self.weapon_sprites = [
-            (0, 16 * (type_index + 1)),   # Left
-            (8, 16 * (type_index + 1)),   # Right
-            (0, 16 * (type_index + 1) + 8),   # Right 45 Up
-            (8, 16 * (type_index + 1) + 8),   # Left 45 Up
-            (16, 16 * (type_index + 1)),  # Left 45 Down
-            (24, 16 * (type_index + 1)),  # Right 45 Down
-            (16, 16 * (type_index + 1) + 8),  # Down
-            (24, 16 * (type_index + 1) + 8),  # Up
-        ]
         self.weapon_w = 8
         self.weapon_h = 8
         self.is_firing = False
@@ -56,6 +46,16 @@ class BaseEnemy:
         # Default sprite locations (can be overridden in subclasses)
         self.sprite_left = (0, 0)
         self.sprite_right = (16, 0)
+        self.weapon_sprites = [
+            (0, 128),   # Left
+            (8, 128),   # Right
+            (0, 136),   # Right 45 Up
+            (8, 136),   # Left 45 Up
+            (16, 128),  # Left 45 Down
+            (24, 128),  # Right 45 Down
+            (16, 136),  # Down
+            (24, 136),  # Up
+        ]
 
     def update(self, player, camera_x=0):
         distance_to_player = abs(player.x - self.x)
@@ -174,20 +174,48 @@ class BaseEnemy:
         if not on_floor:
             self.is_jumping = True
 
-    def draw(self, x_offset=0):
+    def draw(self, x_offset=0, target=None):
         if self.facing_direction == 1:
             sx, sy = self.sprite_right
         else:
             sx, sy = self.sprite_left
         pyxel.blt(self.x - x_offset, self.y, 0, sx, sy, 16, 16, 14)
-        self.draw_weapon(x_offset)
+        self.draw_weapon(x_offset, target)
 
-    def draw_weapon(self, x_offset=0):
-        idx = 1  # Always right for now, can improve
+    def draw_weapon(self, x_offset=0, target=None):
+        # Use player weapon logic for aiming and facing
+        if target is not None:
+            enemy_screen_x = self.x - x_offset + 8
+            enemy_screen_y = self.y + 8
+            player_screen_x = target.x - x_offset + 8
+            player_screen_y = target.y + 8
+            angle = math.atan2(player_screen_y - enemy_screen_y, player_screen_x - enemy_screen_x)
+        else:
+            angle = 0
+        angle_deg = math.degrees(angle)
+        if angle_deg < 0:
+            angle_deg += 360
+        if 157.5 <= angle_deg < 202.5:
+            idx = 0  # Left
+        elif angle_deg < 22.5 or angle_deg >= 337.5:
+            idx = 1  # Right
+        elif 22.5 <= angle_deg < 67.5:
+            idx = 5  # Right 45 Up
+        elif 112.5 <= angle_deg < 157.5:
+            idx = 4  # Left 45 Up
+        elif 202.5 <= angle_deg < 247.5:
+            idx = 3  # Left 45 Down
+        elif 292.5 <= angle_deg < 337.5:
+            idx = 2  # Right 45 Down
+        elif 247.5 <= angle_deg < 292.5:
+            idx = 7  # Down
+        elif 67.5 <= angle_deg < 112.5:
+            idx = 6  # Up
+        else:
+            idx = 1  # Default to Right
         sx, sy = self.weapon_sprites[idx]
         enemy_screen_x = self.x - x_offset + 8
         enemy_screen_y = self.y + 8
-        angle = 0  # Always right for now
         wx = int(enemy_screen_x + math.cos(angle) * 8 - self.weapon_w // 2)
         wy = int(enemy_screen_y + math.sin(angle) * 8 - self.weapon_h // 2)
         pyxel.blt(wx, wy, 0, sx, sy, self.weapon_w, self.weapon_h, 14)
@@ -204,6 +232,16 @@ class RobotEnemy0(BaseEnemy):
         self.special_ability = "Shield (placeholder)"
         self.sprite_left = (0, 16)
         self.sprite_right = (16, 16)
+        self.weapon_sprites = [
+            (0, 128),   # Left
+            (8, 128),   # Right
+            (0, 136),   # Right 45 Up
+            (8, 136),   # Left 45 Up
+            (16, 128),  # Left 45 Down
+            (24, 128),  # Right 45 Down
+            (16, 136),  # Down
+            (24, 136),  # Up
+        ]
 class RobotEnemy1(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(1, x, y, level)
@@ -212,6 +250,16 @@ class RobotEnemy1(BaseEnemy):
         self.special_ability = "EMP (placeholder)"
         self.sprite_left = (0, 96)
         self.sprite_right = (16, 96)
+        self.weapon_sprites = [
+            (0, 128),   # Left
+            (8, 128),   # Right
+            (0, 136),   # Right 45 Up
+            (8, 136),   # Left 45 Up
+            (16, 128),  # Left 45 Down
+            (24, 128),  # Right 45 Down
+            (16, 136),  # Down
+            (24, 136),  # Up
+        ]
 class RobotEnemy2(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(2, x, y, level)
@@ -220,6 +268,16 @@ class RobotEnemy2(BaseEnemy):
         self.special_ability = "Rocket Jump (placeholder)"
         self.sprite_left = (0, 112)
         self.sprite_right = (16, 112)
+        self.weapon_sprites = [
+            (0, 128),   # Left
+            (8, 128),   # Right
+            (0, 136),   # Right 45 Up
+            (8, 136),   # Left 45 Up
+            (16, 128),  # Left 45 Down
+            (24, 128),  # Right 45 Down
+            (16, 136),  # Down
+            (24, 136),  # Up
+        ]
 # Human Enemies
 class HumanEnemy0(BaseEnemy):
     def __init__(self, x, y, level=0):
@@ -229,6 +287,16 @@ class HumanEnemy0(BaseEnemy):
         self.special_ability = "Roll (placeholder)"
         self.sprite_left = (0, 32)
         self.sprite_right = (16, 32)
+        self.weapon_sprites = [
+            (0, 128),   # Left
+            (8, 128),   # Right
+            (0, 136),   # Right 45 Up
+            (8, 136),   # Left 45 Up
+            (16, 128),  # Left 45 Down
+            (24, 128),  # Right 45 Down
+            (16, 136),  # Down
+            (24, 136),  # Up
+        ]
 class HumanEnemy1(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(4, x, y, level)
@@ -237,6 +305,16 @@ class HumanEnemy1(BaseEnemy):
         self.special_ability = "Sprint (placeholder)"
         self.sprite_left = (0, 46)
         self.sprite_right = (16, 46)
+        self.weapon_sprites = [
+            (0, 128),   # Left
+            (8, 128),   # Right
+            (0, 136),   # Right 45 Up
+            (8, 136),   # Left 45 Up
+            (16, 128),  # Left 45 Down
+            (24, 128),  # Right 45 Down
+            (16, 136),  # Down
+            (24, 136),  # Up
+        ]
 class HumanEnemy2(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(5, x, y, level)
@@ -245,6 +323,16 @@ class HumanEnemy2(BaseEnemy):
         self.special_ability = "Grenade (placeholder)"
         self.sprite_left = (0, 64)
         self.sprite_right = (16, 64)
+        self.weapon_sprites = [
+            (0, 128),   # Left
+            (8, 128),   # Right
+            (0, 136),   # Right 45 Up
+            (8, 136),   # Left 45 Up
+            (16, 128),  # Left 45 Down
+            (24, 128),  # Right 45 Down
+            (16, 136),  # Down
+            (24, 136),  # Up
+        ]
 class HumanEnemy3(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(6, x, y, level)
@@ -253,6 +341,16 @@ class HumanEnemy3(BaseEnemy):
         self.special_ability = "Camouflage (placeholder)"
         self.sprite_left = (0, 80)
         self.sprite_right = (16, 80)
+        self.weapon_sprites = [
+            (0, 128),   # Left
+            (8, 128),   # Right
+            (0, 136),   # Right 45 Up
+            (8, 136),   # Left 45 Up
+            (16, 128),  # Left 45 Down
+            (24, 128),  # Right 45 Down
+            (16, 136),  # Down
+            (24, 136),  # Up
+        ]
 
 def create_enemy(type_index, x, y, level=0):
     if type_index == 0:

@@ -94,7 +94,7 @@ class Neurotrace:
             self.map.drawMap(self.level, self.camera_x)
             self.player.draw(self.camera_x)
             for enemy in self.enemies:
-                enemy.draw(self.camera_x)
+                enemy.draw(self.camera_x, target=self.player)
             
     
 if __name__ == "__main__":
