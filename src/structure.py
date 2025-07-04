@@ -9,9 +9,13 @@ STRUCTURE = {
             # (80, 80, 48, 16),   # Platform 2
         ],
         "enemies": [
-            (0, 40, 95),  # type 0 at (40, 95)
+            (4, 40, 95),  # type 0 at (40, 95)
             (1, 80, 95),  # type 1 at (80, 95)
             # Add more as needed
-        ]
+        ],
+        "mapWall": [
+            (0, 0, 8, 128),            # Left wall
+            (128*4-8, 0, 16, 128),     # Right wall
+        ],
     },
 }

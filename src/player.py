@@ -129,6 +129,22 @@ class Player:
         # Apply gravity
         self.velocity_y += self.gravity
         self.y += self.velocity_y
+        # Clamp player x position to map walls
+        map_walls = self.structure[level]["mapWall"]
+        if len(map_walls) >= 2:
+            left_wall = map_walls[0]
+            right_wall = map_walls[1]
+            min_x = left_wall[0] + left_wall[2]  # right edge of left wall
+            max_x = right_wall[0] - 16           # left edge of right wall minus player width
+            if self.x < min_x:
+                self.x = min_x
+            if self.x > max_x:
+                self.x = max_x
+        # Optionally clamp y to not fall below the map
+        map_height = self.structure[level]["mapWH"][1]
+        if self.y > map_height:
+            self.y = map_height
+            self.velocity_y = 0
         # Check floor collision
         self.checkFloorCollision(level)
         # Update animation - continue animation while moving

@@ -20,13 +20,45 @@ class BaseEnemy:
         self.facing_direction = 1
         self.animation_frame = 0
         self.animation_timer = 0
+        # Weapon system
+        self.weapon_types = [
+            {
+                'name': 'Pistol',
+                'sprites': [
+                    (0, 128), (8, 128), (0, 136), (8, 136), (16, 128), (24, 128), (16, 136), (24, 136)
+                ],
+                'range': 60,
+                'ai': 'default',
+            },
+            {
+                'name': 'Rifle',
+                'sprites': [
+                    (0, 160), (8, 160), (0, 168), (8, 168), (16, 160), (24, 160), (16, 168), (24, 168)
+                ],
+                'range': 100,
+                'ai': 'rifle',
+            },
+            {
+                'name': 'Sniper',
+                'sprites': [
+                    (0, 176), (8, 176), (0, 184), (8, 184), (16, 176), (24, 176), (16, 184), (24, 184)
+                ],
+                'range': 180,
+                'ai': 'sniper',
+            },
+        ]
+        weapon_choice = random.choice(self.weapon_types)
+        self.weapon = weapon_choice['name']
+        self.weapon_sprites = weapon_choice['sprites']
+        self.weapon_range = weapon_choice['range']
+        self.weapon_ai = weapon_choice['ai']
         # Weapon system (weapon_sprites will be set in subclasses)
         self.weapon_offset = 5
         self.weapon_w = 8
         self.weapon_h = 8
         self.is_firing = False
         self.fire_timer = 0
-        self.fire_duration = 24
+        self.fire_duration = 6
         self.fire_angle = 0
         self.fire_line = None
         # AI State
@@ -44,7 +76,6 @@ class BaseEnemy:
         self.attack_cooldown = 0
         self.attack_cooldown_max = 60
         self.miss_chance = 0.2  # Default, override in subclasses
-        self.weapon = "Basic Gun"  # Placeholder, override in subclasses
         self.special_ability = None  # Placeholder, override in subclasses
         # Default sprite locations (can be overridden in subclasses)
         self.sprite_left = (0, 0)
@@ -53,16 +84,6 @@ class BaseEnemy:
         self.sprite_damage_right = (48, 0)
         self.sprite_defeated_left = (64, 0)
         self.sprite_defeated_right = (80, 0)
-        self.weapon_sprites = [
-            (0, 128),   # Left
-            (8, 128),   # Right
-            (0, 136),   # Right 45 Up
-            (8, 136),   # Left 45 Up
-            (16, 128),  # Left 45 Down
-            (24, 128),  # Right 45 Down
-            (16, 136),  # Down
-            (24, 136),  # Up
-        ]
 
     def take_damage(self, amount):
         if self.visual_state == "defeated":
@@ -85,61 +106,100 @@ class BaseEnemy:
         if not self.alive:
             return
         distance_to_player = abs(player.x - self.x)
-        if self.state == "patrol":
-            if distance_to_player < 80:
-                self.state = "chase"
+        # Smarter AI: check for platform edge before moving
+        def will_fall_off_platform(dx):
+            next_x = self.x + dx
+            for floor in self.structure[self.level]["mapFloor"]:
+                fx, fy, fw, fh = floor
+                if fx <= next_x < fx+fw and self.y+16 == fy:
+                    return False
+            return True
+        # Weapon-based AI thresholds
+        if self.weapon_ai == 'sniper':
+            retreat_dist = 120
+            attack_min = 120
+            attack_max = self.weapon_range
+            patrol_dist = 200
+        elif self.weapon_ai == 'rifle':
+            retreat_dist = 40
+            attack_min = 40
+            attack_max = self.weapon_range
+            patrol_dist = 120
+        else:
+            retreat_dist = 40
+            attack_min = 40
+            attack_max = 60
+            patrol_dist = 100
+        # State machine for all weapons
+        if self.state == 'patrol':
+            if distance_to_player < attack_max:
+                self.state = 'chase'
             elif self.stand_timer > 0:
                 self.is_moving = False
                 self.stand_timer -= 1
             else:
                 self.is_moving = True
-                self.x += self.speed * self.patrol_dir
-                self.facing_direction = self.patrol_dir
+                dx = self.speed * self.patrol_dir
+                if not will_fall_off_platform(dx):
+                    self.x += dx
+                    self.facing_direction = self.patrol_dir
                 if abs(self.x - self.patrol_origin) > self.patrol_range:
                     self.patrol_dir *= -1
                     self.stand_timer = random.randint(30, 90)
-        elif self.state == "chase":
-            if distance_to_player < 40:
-                self.state = "retreat"
+        elif self.state == 'chase':
+            if distance_to_player < retreat_dist:
+                self.state = 'retreat'
                 self.retreat_timer = random.randint(30, 60)
-            elif distance_to_player < 60:
-                self.state = "attack"
-            elif distance_to_player > 100:
-                self.state = "patrol"
+            elif attack_min <= distance_to_player < attack_max:
+                self.state = 'attack'
+            elif distance_to_player > patrol_dist:
+                self.state = 'patrol'
             else:
                 self.is_moving = True
-                if player.x > self.x:
-                    self.x += self.speed
-                    self.facing_direction = 1
-                elif player.x < self.x:
-                    self.x -= self.speed
-                    self.facing_direction = -1
-        elif self.state == "attack":
-            if distance_to_player < 40:
-                self.state = "retreat"
+                dx = self.speed if player.x > self.x else -self.speed
+                if not will_fall_off_platform(dx):
+                    self.x += dx
+                    self.facing_direction = 1 if player.x > self.x else -1
+        elif self.state == 'attack':
+            if distance_to_player < retreat_dist:
+                self.state = 'retreat'
                 self.retreat_timer = random.randint(30, 60)
-            elif distance_to_player > 80:
-                self.state = "chase"
+            elif distance_to_player > attack_max:
+                self.state = 'chase'
             else:
                 self.is_moving = False
                 self.facing_direction = 1 if player.x > self.x else -1
                 if self.attack_cooldown == 0:
                     self.fire(player, camera_x)
                     self.attack_cooldown = self.attack_cooldown_max
-        elif self.state == "retreat":
+        elif self.state == 'retreat':
             if self.retreat_timer > 0:
                 self.is_moving = True
-                if player.x > self.x:
-                    self.x -= self.speed
-                    self.facing_direction = -1
-                else:
-                    self.x += self.speed
-                    self.facing_direction = 1
+                dx = -self.speed if player.x > self.x else self.speed
+                if not will_fall_off_platform(dx):
+                    self.x += dx
+                    self.facing_direction = -1 if player.x > self.x else 1
                 self.retreat_timer -= 1
             else:
-                self.state = "patrol"
+                self.state = 'patrol'
         self.velocity_y += self.gravity
         self.y += self.velocity_y
+        # Clamp enemy x position to map walls
+        map_walls = self.structure[self.level]["mapWall"]
+        if len(map_walls) >= 2:
+            left_wall = map_walls[0]
+            right_wall = map_walls[1]
+            min_x = left_wall[0] + left_wall[2]
+            max_x = right_wall[0] - 16
+            if self.x < min_x:
+                self.x = min_x
+            if self.x > max_x:
+                self.x = max_x
+        # Clamp y to not fall below map
+        map_height = self.structure[self.level]["mapWH"][1]
+        if self.y > map_height:
+            self.y = map_height
+            self.velocity_y = 0
         self.checkFloorCollision(self.level)
         if self.is_firing:
             self.fire_timer -= 1
@@ -157,7 +217,11 @@ class BaseEnemy:
             enemy_screen_y = self.y + 8
             player_screen_x = player.x - camera_x + 8
             player_screen_y = player.y + 8
-            angle = math.atan2(player_screen_y - enemy_screen_y, player_screen_x - enemy_screen_x)
+            # Lead shot: predict player position
+            player_vx = getattr(player, 'velocity_x', 0) if hasattr(player, 'velocity_x') else 0
+            lead_time = 8 / max(1, abs(player_vx)) if player_vx != 0 else 0
+            predicted_x = player.x + player_vx * lead_time
+            angle = math.atan2(player_screen_y - enemy_screen_y, predicted_x - self.x)
             if random.random() < self.miss_chance:
                 angle += random.uniform(-0.4, 0.4)
             self.fire_angle = angle
@@ -257,164 +321,87 @@ class RobotEnemy0(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(0, x, y, level)
         self.miss_chance = 0.75
-        self.weapon = "Laser Blaster"
         self.special_ability = "Shield (placeholder)"
-        self.hp = 20
+        self.hp = 30
         self.sprite_left = (0, 16)
         self.sprite_right = (16, 16)
         self.sprite_damage_left = (32, 16)
         self.sprite_damage_right = (48, 16)
         self.sprite_defeated_left = (64, 16)
         self.sprite_defeated_right = (80, 16)
-        self.weapon_sprites = [
-            (0, 128),   # Left
-            (8, 128),   # Right
-            (0, 136),   # Right 45 Up
-            (8, 136),   # Left 45 Up
-            (16, 128),  # Left 45 Down
-            (24, 128),  # Right 45 Down
-            (16, 136),  # Down
-            (24, 136),  # Up
-        ]
 class RobotEnemy1(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(1, x, y, level)
         self.miss_chance = 0.7
-        self.weapon = "Pulse Rifle"
         self.special_ability = "EMP (placeholder)"
-        self.hp = 18
+        self.hp = 35
         self.sprite_left = (0, 96)
         self.sprite_right = (16, 96)
         self.sprite_damage_left = (32, 96)
         self.sprite_damage_right = (48, 96)
         self.sprite_defeated_left = (64, 96)
         self.sprite_defeated_right = (80, 96)
-        self.weapon_sprites = [
-            (0, 128),   # Left
-            (8, 128),   # Right
-            (0, 136),   # Right 45 Up
-            (8, 136),   # Left 45 Up
-            (16, 128),  # Left 45 Down
-            (24, 128),  # Right 45 Down
-            (16, 136),  # Down
-            (24, 136),  # Up
-        ]
 class RobotEnemy2(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(2, x, y, level)
         self.miss_chance = 0.4
-        self.weapon = "Rocket Arm"
         self.special_ability = "Rocket Jump (placeholder)"
-        self.hp = 25
+        self.hp = 45
         self.sprite_left = (0, 112)
         self.sprite_right = (16, 112)
         self.sprite_damage_left = (32, 112)
         self.sprite_damage_right = (48, 112)
         self.sprite_defeated_left = (64, 112)
         self.sprite_defeated_right = (80, 112)
-        self.weapon_sprites = [
-            (0, 128),   # Left
-            (8, 128),   # Right
-            (0, 136),   # Right 45 Up
-            (8, 136),   # Left 45 Up
-            (16, 128),  # Left 45 Down
-            (24, 128),  # Right 45 Down
-            (16, 136),  # Down
-            (24, 136),  # Up
-        ]
 # Human Enemies
 class HumanEnemy0(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(3, x, y, level)
         self.miss_chance = 0.8
-        self.weapon = "Pistol"
         self.special_ability = "Roll (placeholder)"
-        self.hp = 8
+        self.hp = 20
         self.sprite_left = (0, 32)
         self.sprite_right = (16, 32)
         self.sprite_damage_left = (32, 32)
         self.sprite_damage_right = (48, 32)
         self.sprite_defeated_left = (64, 32)
         self.sprite_defeated_right = (80, 32)
-        self.weapon_sprites = [
-            (0, 128),   # Left
-            (8, 128),   # Right
-            (0, 136),   # Right 45 Up
-            (8, 136),   # Left 45 Up
-            (16, 128),  # Left 45 Down
-            (24, 128),  # Right 45 Down
-            (16, 136),  # Down
-            (24, 136),  # Up
-        ]
 class HumanEnemy1(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(4, x, y, level)
         self.miss_chance = 0.6
-        self.weapon = "Shotgun"
         self.special_ability = "Sprint (placeholder)"
-        self.hp = 10
-        self.sprite_left = (0, 46)
-        self.sprite_right = (16, 46)
-        self.sprite_damage_left = (32, 46)
-        self.sprite_damage_right = (48, 46)
-        self.sprite_defeated_left = (64, 46)
-        self.sprite_defeated_right = (80, 46)
-        self.weapon_sprites = [
-            (0, 128),   # Left
-            (8, 128),   # Right
-            (0, 136),   # Right 45 Up
-            (8, 136),   # Left 45 Up
-            (16, 128),  # Left 45 Down
-            (24, 128),  # Right 45 Down
-            (16, 136),  # Down
-            (24, 136),  # Up
-        ]
+        self.hp = 25
+        self.sprite_left = (0, 48)
+        self.sprite_right = (16, 48)
+        self.sprite_damage_left = (32, 48)
+        self.sprite_damage_right = (48, 48)
+        self.sprite_defeated_left = (64, 48)
+        self.sprite_defeated_right = (80, 48)
 class HumanEnemy2(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(5, x, y, level)
         self.miss_chance = 0.3
-        self.weapon = "SMG"
         self.special_ability = "Grenade (placeholder)"
-        self.hp = 12
+        self.hp = 35
         self.sprite_left = (0, 64)
         self.sprite_right = (16, 64)
         self.sprite_damage_left = (32, 64)
         self.sprite_damage_right = (48, 64)
         self.sprite_defeated_left = (64, 64)
         self.sprite_defeated_right = (80, 64)
-        self.weapon_sprites = [
-            (0, 128),   # Left
-            (8, 128),   # Right
-            (0, 136),   # Right 45 Up
-            (8, 136),   # Left 45 Up
-            (16, 128),  # Left 45 Down
-            (24, 128),  # Right 45 Down
-            (16, 136),  # Down
-            (24, 136),  # Up
-        ]
 class HumanEnemy3(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(6, x, y, level)
         self.miss_chance = 0.1
-        self.weapon = "Sniper"
         self.special_ability = "Camouflage (placeholder)"
-        self.hp = 6
+        self.hp = 50
         self.sprite_left = (0, 80)
         self.sprite_right = (16, 80)
         self.sprite_damage_left = (32, 80)
         self.sprite_damage_right = (48, 80)
         self.sprite_defeated_left = (64, 80)
         self.sprite_defeated_right = (80, 80)
-        self.weapon_sprites = [
-            (0, 128),   # Left
-            (8, 128),   # Right
-            (0, 136),   # Right 45 Up
-            (8, 136),   # Left 45 Up
-            (16, 128),  # Left 45 Down
-            (24, 128),  # Right 45 Down
-            (16, 136),  # Down
-            (24, 136),  # Up
-        ]
 
 def create_enemy(type_index, x, y, level=0):
     if type_index == 0:
