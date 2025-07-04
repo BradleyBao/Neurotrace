@@ -79,7 +79,7 @@ class Neurotrace:
             self.player.fire(self.camera_x)
 
         # Update player physics and animations
-        self.player.update(self.level, self.camera_x)
+        self.player.update(self.level, self.camera_x, self.enemies)
 
         # Update enemies
         for enemy in self.enemies:

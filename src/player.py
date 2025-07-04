@@ -27,6 +27,13 @@ class Player:
         self.dash_remaining = 0
         self.dash_direction = 1  # 1 for right, -1 for left
         # Weapon system
+        self.weapons = [
+            {'name': 'Pistol', 'color': 0, 'penetrate': False},
+            {'name': 'Rifle', 'color': 12, 'penetrate': True},
+            {'name': 'Sniper', 'color': 8, 'penetrate': True},
+        ]
+        self.current_weapon = 0
+        self.bullets = []  # List of bullets: {'x', 'y', 'vx', 'vy', 'color', 'penetrate', 'alive'}
         self.weapon_offset = 5  # 1/3 of 16px
         # 8 directions: [L, R, R45U, L45U, L45D, R45D, D, U]
         self.weapon_sprites = [
@@ -59,6 +66,16 @@ class Player:
         self.fire_line = None  # (x0, y0, x1, y1)
         # Load animation frames
         self.loadAnimation()
+        self.health = 400
+        self.max_health = 400
+        self.alive = True
+        self.is_shielding = False
+        self.normal_speed = self.speed
+        self.shield_speed = 0.2  # Dramatically slower
+        self.shield_stamina = 600  # 10 seconds at 60fps
+        self.shield_stamina_max = 600
+        self.shield_cooldown = 0  # frames
+        self.shield_cooldown_max = 600  # 10 seconds
 
     def loadAnimation(self):
         self.walk_left = [(48, 0), (64, 0)]
@@ -68,13 +85,19 @@ class Player:
 
     def moveLeft(self):
         if not self.is_dashing:
-            self.x -= self.speed
+            if self.is_shielding:
+                self.x -= self.shield_speed
+            else:
+                self.x -= self.speed
         self.is_moving = True
         self.dash_direction = -1
 
     def moveRight(self):
         if not self.is_dashing:
-            self.x += self.speed
+            if self.is_shielding:
+                self.x += self.shield_speed
+            else:
+                self.x += self.speed
         self.is_moving = True
         self.dash_direction = 1
 
@@ -93,16 +116,52 @@ class Player:
         if not self.is_firing:
             self.is_firing = True
             self.fire_timer = self.fire_duration
-            # Store the angle for the shot (for the bullet line only)
             player_screen_x = self.x - camera_x + 8
             player_screen_y = self.y + 8
             mx = pyxel.mouse_x
             my = pyxel.mouse_y
-            self.fire_angle = math.atan2(my - player_screen_y, mx - player_screen_x)
-            # Calculate the line end (blocked by floor)
-            self.fire_line = self.calculate_fire_line(self.fire_angle, camera_x)
+            angle = math.atan2(my - player_screen_y, mx - player_screen_x)
+            weapon = self.weapons[self.current_weapon]
+            # Update weapon sprites for visual model
+            if weapon['name'] == 'Pistol':
+                self.weapon_sprites = [
+                    (0, 128), (8, 128), (0, 136), (8, 136), (16, 128), (24, 128), (16, 136), (24, 136)
+                ]
+                self.weapon_fire_sprites = [
+                    (32, 128), (40, 128), (32, 136), (40, 136), (48, 128), (56, 128), (48, 136), (56, 136)
+                ]
+            elif weapon['name'] == 'Rifle':
+                self.weapon_sprites = [
+                    (0, 160), (8, 160), (0, 168), (8, 168), (16, 160), (24, 160), (16, 168), (24, 168)
+                ]
+                self.weapon_fire_sprites = [
+                    (32, 160), (40, 160), (32, 168), (40, 168), (48, 160), (56, 160), (48, 168), (56, 168)
+                ]
+            elif weapon['name'] == 'Sniper':
+                self.weapon_sprites = [
+                    (0, 176), (8, 176), (0, 184), (8, 184), (16, 176), (24, 176), (16, 184), (24, 184)
+                ]
+                self.weapon_fire_sprites = [
+                    (32, 176), (40, 176), (32, 184), (40, 184), (48, 176), (56, 176), (48, 184), (56, 184)
+                ]
+            if weapon['name'] == 'Sniper':
+                self.fire_angle = angle
+                self.fire_line = self.calculate_fire_line(angle, camera_x)
+            else:
+                speed = 8 if weapon['name'] == 'Rifle' else 5
+                bullet = {'x': self.x + 8 + math.cos(angle) * 2,
+                          'y': self.y + 8 + math.sin(angle) * 2,
+                          'vx': math.cos(angle) * speed,
+                          'vy': math.sin(angle) * speed,
+                          'color': weapon['color'],
+                          'penetrate': weapon['penetrate'],
+                          'alive': True,
+                          'damage': 1 if weapon['name']=='Pistol' else 2}
+                if weapon['name'] == 'Rifle':
+                    bullet['penetrate_count'] = 2
+                self.bullets.append(bullet)
 
-    def update(self, level=0, camera_x=0):
+    def update(self, level=0, camera_x=0, enemies=None):
         # Mouse-based facing
         player_cx = self.x + 8
         player_cy = self.y + 8
@@ -120,12 +179,59 @@ class Player:
                 self.is_dashing = False
         elif self.dash_cooldown > 0:
             self.dash_cooldown -= 1
+        # Weapon switching
+        if pyxel.btnp(pyxel.KEY_Q):
+            self.current_weapon = (self.current_weapon - 1) % len(self.weapons)
+        if pyxel.btnp(pyxel.KEY_E):
+            self.current_weapon = (self.current_weapon + 1) % len(self.weapons)
         # Firing logic
         if self.is_firing:
             self.fire_timer -= 1
             if self.fire_timer <= 0:
                 self.is_firing = False
                 self.fire_line = None
+        # Update bullets
+        for bullet in self.bullets:
+            if not bullet['alive']:
+                continue
+            bullet['x'] += bullet['vx']
+            bullet['y'] += bullet['vy']
+            # Remove if out of bounds
+            if bullet['x'] < 0 or bullet['x'] > 2560 or bullet['y'] < 0 or bullet['y'] > 128:
+                bullet['alive'] = False
+            # Bullet collision with map floors
+            for floor in self.structure[level]['mapFloor']:
+                fx, fy, fw, fh = floor
+                if fx <= bullet['x'] <= fx+fw and fy <= bullet['y'] <= fy+fh:
+                    bullet['alive'] = False
+            # Bullet collision with map walls
+            for wall in self.structure[level]['mapWall']:
+                wx, wy, ww, wh = wall
+                if wx <= bullet['x'] <= wx+ww and wy <= bullet['y'] <= wy+wh:
+                    bullet['alive'] = False
+            # Bullet collision with enemies
+            if enemies:
+                for enemy in enemies:
+                    if not enemy.alive:
+                        continue
+                    if (enemy.x < bullet['x'] < enemy.x+16 and enemy.y < bullet['y'] < enemy.y+16):
+                        enemy.take_damage(bullet.get('damage', 1))
+                        if bullet.get('penetrate_count') is not None:
+                            bullet['penetrate_count'] -= 1
+                            if bullet['penetrate_count'] <= 0:
+                                bullet['alive'] = False
+                        elif not bullet['penetrate']:
+                            bullet['alive'] = False
+        self.bullets = [b for b in self.bullets if b['alive']]
+        # Sniper line damage
+        if self.weapons[self.current_weapon]['name'] == 'Sniper' and self.is_firing and self.fire_line and enemies:
+            x0, y0, x1, y1 = self.fire_line
+            for enemy in enemies:
+                if not enemy.alive:
+                    continue
+                ex, ey = enemy.x, enemy.y
+                if self.line_intersects_rect(x0, y0, x1, y1, ex, ey, 16, 16):
+                    enemy.take_damage(5)
         # Apply gravity
         self.velocity_y += self.gravity
         self.y += self.velocity_y
@@ -157,6 +263,24 @@ class Player:
             # Reset animation when not moving
             self.animation_frame = 0
             self.animation_timer = 0
+        # Shield stamina and cooldown logic
+        if pyxel.btn(pyxel.KEY_SHIFT) and self.shield_stamina > 0 and self.shield_cooldown == 0:
+            self.is_shielding = True
+            self.speed = self.shield_speed
+            self.shield_stamina -= 1
+            if self.shield_stamina <= 0:
+                self.shield_stamina = 0
+                self.is_shielding = False
+                self.shield_cooldown = self.shield_cooldown_max
+                self.speed = self.normal_speed
+        else:
+            if self.is_shielding:
+                self.speed = self.normal_speed
+            self.is_shielding = False
+            if self.shield_cooldown > 0:
+                self.shield_cooldown -= 1
+            elif self.shield_stamina < self.shield_stamina_max:
+                self.shield_stamina += 1
 
     def calculate_fire_line(self, angle, camera_x=0):
         # Start at gun muzzle
@@ -285,6 +409,7 @@ class Player:
             return 1  # Default to Right
 
     def draw(self, x_offset=0, camera_x=0):
+        # Draw player sprite
         if self.is_moving:
             # Draw walking animation
             if self.facing_direction == 1:  # Right
@@ -298,5 +423,70 @@ class Player:
                 pyxel.blt(self.x - x_offset, self.y, 0, self.stand_frame_right[0], self.stand_frame_right[1], 16, 16, 14)
             else:  # Left
                 pyxel.blt(self.x - x_offset, self.y, 0, self.stand_frame_left[0], self.stand_frame_left[1], 16, 16, 14)
+        # Draw shield overlay if shielding
+        if self.is_shielding:
+            if self.facing_direction == 1:  # Right
+                pyxel.blt(self.x - x_offset + 4, self.y, 0, 32, 144, 16, 16, 14)
+            else:  # Left
+                pyxel.blt(self.x - x_offset - 4, self.y, 0, 48, 144, 16, 16, 14)
         # Draw weapon after player
         self.draw_weapon(x_offset, camera_x)
+        # Draw health bar above player (red)
+        bar_x = self.x - x_offset
+        bar_y = self.y - 8
+        bar_w = 16
+        bar_h = 2
+        health_ratio = self.health / self.max_health
+        pyxel.rect(bar_x, bar_y, int(bar_w * health_ratio), bar_h, 8)
+        # Draw player health text
+        pyxel.text(5, 5, f"HP: {self.health}/{self.max_health}", 7)
+        # Draw shield icon and bar at bottom left
+        icon_x = 2
+        icon_y = pyxel.height - 12
+        pyxel.blt(icon_x, icon_y, 0, 0, 192, 8, 8, 0)
+        # Draw shield stamina/cooldown bar below icon
+        bar_x = icon_x
+        bar_y = icon_y + 9
+        bar_w = 8
+        bar_h = 2
+        stamina_ratio = self.shield_stamina / self.shield_stamina_max
+        pyxel.rect(bar_x, bar_y, int(bar_w * stamina_ratio), bar_h, 11)
+        if self.shield_cooldown > 0:
+            cd_ratio = self.shield_cooldown / self.shield_cooldown_max
+            pyxel.rect(bar_x, bar_y, int(bar_w * cd_ratio), bar_h, 8)
+        # Draw bullets
+        for bullet in self.bullets:
+            if bullet['alive']:
+                pyxel.circ(bullet['x'] - x_offset, bullet['y'], 1, bullet['color'])
+        # Draw sniper line if active
+        if self.weapons[self.current_weapon]['name'] == 'Sniper' and self.is_firing and self.fire_line:
+            x0, y0, x1, y1 = self.fire_line
+            pyxel.line(x0 - x_offset, y0, x1 - x_offset, y1, 8)
+
+    @staticmethod
+    def line_intersects_rect(x0, y0, x1, y1, rx, ry, rw, rh):
+        # Simple AABB vs line segment check
+        if rx <= x0 <= rx+rw and ry <= y0 <= ry+rh:
+            return True
+        if rx <= x1 <= rx+rw and ry <= y1 <= ry+rh:
+            return True
+        def ccw(A, B, C):
+            return (C[1]-A[1]) * (B[0]-A[0]) > (B[1]-A[1]) * (C[0]-A[0])
+        def intersect(A,B,C,D):
+            return ccw(A,C,D) != ccw(B,C,D) and ccw(A,B,C) != ccw(A,B,D)
+        rect_edges = [
+            ((rx,ry), (rx+rw,ry)),
+            ((rx+rw,ry), (rx+rw,ry+rh)),
+            ((rx+rw,ry+rh), (rx,ry+rh)),
+            ((rx,ry+rh), (rx,ry)),
+        ]
+        for edge in rect_edges:
+            if intersect((x0,y0), (x1,y1), edge[0], edge[1]):
+                return True
+        return False
+
+    def take_damage(self, amount):
+        self.health -= amount
+        if self.health <= 0:
+            self.health = 0
+            self.alive = False

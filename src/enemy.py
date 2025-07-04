@@ -84,6 +84,7 @@ class BaseEnemy:
         self.sprite_damage_right = (48, 0)
         self.sprite_defeated_left = (64, 0)
         self.sprite_defeated_right = (80, 0)
+        self.bullets = []  # List of bullets: {'x', 'y', 'vx', 'vy', 'color', 'penetrate', 'alive'}
 
     def take_damage(self, amount):
         if self.visual_state == "defeated":
@@ -208,6 +209,43 @@ class BaseEnemy:
                 self.fire_line = None
         if self.attack_cooldown > 0:
             self.attack_cooldown -= 1
+        # Update bullets
+        for bullet in self.bullets:
+            if not bullet['alive']:
+                continue
+            bullet['x'] += bullet['vx']
+            bullet['y'] += bullet['vy']
+            # Remove if out of bounds
+            if bullet['x'] < 0 or bullet['x'] > 2560 or bullet['y'] < 0 or bullet['y'] > 128:
+                bullet['alive'] = False
+            # Bullet collision with map floors
+            for floor in self.structure[self.level]['mapFloor']:
+                fx, fy, fw, fh = floor
+                if fx <= bullet['x'] <= fx+fw and fy <= bullet['y'] <= fy+fh:
+                    bullet['alive'] = False
+            # Bullet collision with map walls
+            for wall in self.structure[self.level]['mapWall']:
+                wx, wy, ww, wh = wall
+                if wx <= bullet['x'] <= wx+ww and wy <= bullet['y'] <= wy+wh:
+                    bullet['alive'] = False
+            # Bullet collision with player
+            if (player.x < bullet['x'] < player.x+16 and player.y < bullet['y'] < player.y+16):
+                if self.weapon == 'Pistol':
+                    player.take_damage(1)
+                elif self.weapon == 'Rifle':
+                    player.take_damage(2)
+                    if bullet.get('penetrate_count') is not None:
+                        bullet['penetrate_count'] -= 1
+                        if bullet['penetrate_count'] <= 0:
+                            bullet['alive'] = False
+                if not bullet['penetrate']:
+                    bullet['alive'] = False
+        self.bullets = [b for b in self.bullets if b['alive']]
+        # Sniper line damage
+        if self.weapon == 'Sniper' and self.is_firing and self.fire_line:
+            x0, y0, x1, y1 = self.fire_line
+            if self.line_intersects_rect(x0, y0, x1, y1, player.x, player.y, 16, 16):
+                player.take_damage(5)
 
     def fire(self, player, camera_x=0):
         if not self.is_firing:
@@ -224,8 +262,21 @@ class BaseEnemy:
             angle = math.atan2(player_screen_y - enemy_screen_y, predicted_x - self.x)
             if random.random() < self.miss_chance:
                 angle += random.uniform(-0.4, 0.4)
-            self.fire_angle = angle
-            self.fire_line = self.calculate_fire_line(self.fire_angle)
+            if self.weapon == 'Sniper':
+                self.fire_angle = angle
+                self.fire_line = self.calculate_fire_line(angle)
+            else:
+                speed = 8 if self.weapon == 'Rifle' else 5
+                color = 12 if self.weapon == 'Rifle' else 0
+                penetrate = True if self.weapon == 'Rifle' else False
+                vx = math.cos(angle) * speed
+                vy = math.sin(angle) * speed
+                bx = self.x + 8 + vx * 2
+                by = self.y + 8 + vy * 2
+                bullet = {'x': bx, 'y': by, 'vx': vx, 'vy': vy, 'color': color, 'penetrate': penetrate, 'alive': True}
+                if self.weapon == 'Rifle':
+                    bullet['penetrate_count'] = 2
+                self.bullets.append(bullet)
 
     def calculate_fire_line(self, angle):
         enemy_cx = self.x + 8
@@ -274,6 +325,14 @@ class BaseEnemy:
         pyxel.blt(self.x - x_offset, self.y, 0, sx, sy, 16, 16, 14)
         if self.visual_state != "defeated":
             self.draw_weapon(x_offset, target)
+        # Draw bullets
+        for bullet in self.bullets:
+            if bullet['alive']:
+                pyxel.circ(bullet['x'] - x_offset, bullet['y'], 1, bullet['color'])
+        # Draw sniper line if active
+        if self.weapon == 'Sniper' and self.is_firing and self.fire_line:
+            x0, y0, x1, y1 = self.fire_line
+            pyxel.line(x0 - x_offset, y0, x1 - x_offset, y1, 8)
 
     def draw_weapon(self, x_offset=0, target=None):
         # Use player weapon logic for aiming and facing
@@ -312,9 +371,28 @@ class BaseEnemy:
         wx = int(enemy_screen_x + math.cos(angle) * 8 - self.weapon_w // 2)
         wy = int(enemy_screen_y + math.sin(angle) * 8 - self.weapon_h // 2)
         pyxel.blt(wx, wy, 0, sx, sy, self.weapon_w, self.weapon_h, 14)
-        if self.is_firing and self.fire_line:
-            x0, y0, x1, y1 = self.fire_line
-            pyxel.line(x0 - x_offset, y0, x1 - x_offset, y1, 8)
+
+    @staticmethod
+    def line_intersects_rect(x0, y0, x1, y1, rx, ry, rw, rh):
+        # Simple AABB vs line segment check
+        if rx <= x0 <= rx+rw and ry <= y0 <= ry+rh:
+            return True
+        if rx <= x1 <= rx+rw and ry <= y1 <= ry+rh:
+            return True
+        def ccw(A, B, C):
+            return (C[1]-A[1]) * (B[0]-A[0]) > (B[1]-A[1]) * (C[0]-A[0])
+        def intersect(A,B,C,D):
+            return ccw(A,C,D) != ccw(B,C,D) and ccw(A,B,C) != ccw(A,B,D)
+        rect_edges = [
+            ((rx,ry), (rx+rw,ry)),
+            ((rx+rw,ry), (rx+rw,ry+rh)),
+            ((rx+rw,ry+rh), (rx,ry+rh)),
+            ((rx,ry+rh), (rx,ry)),
+        ]
+        for edge in rect_edges:
+            if intersect((x0,y0), (x1,y1), edge[0], edge[1]):
+                return True
+        return False
 
 # Robot Enemies
 class RobotEnemy0(BaseEnemy):
