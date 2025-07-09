@@ -1,4 +1,4 @@
-import pyxel, src.structure, src.settings
+import pyxel, src.structure, src.settings, src.game_status
 import math
 
 class Player:
@@ -162,6 +162,11 @@ class Player:
                 self.bullets.append(bullet)
 
     def update(self, level=0, camera_x=0, enemies=None):
+        # If dead, disable all actions and set game status to Game Over
+        if not self.alive:
+            self.is_moving = False
+            
+            return
         # Mouse-based facing
         player_cx = self.x + 8
         player_cy = self.y + 8
@@ -409,6 +414,20 @@ class Player:
             return 1  # Default to Right
 
     def draw(self, x_offset=0, camera_x=0):
+        # Draw player death sprite if dead
+        if not self.alive:
+            if self.facing_direction == 1:  # Right
+                pyxel.blt(self.x - x_offset, self.y, 0, 160, 0, 16, 16, 14)
+            else:  # Left
+                pyxel.blt(self.x - x_offset, self.y, 0, 144, 0, 16, 16, 14)
+            # Optionally, draw health bar and text as zero
+            bar_x = self.x - x_offset
+            bar_y = self.y - 8
+            bar_w = 16
+            bar_h = 2
+            pyxel.rect(bar_x, bar_y, 0, bar_h, 8)
+            pyxel.text(5, 5, f"HP: 0/{self.max_health}", 7)
+            return
         # Draw player sprite
         if self.is_moving:
             # Draw walking animation
@@ -486,6 +505,8 @@ class Player:
         return False
 
     def take_damage(self, amount):
+        if self.is_shielding:
+            amount = (amount + 1) // 2  # Halve and round up
         self.health -= amount
         if self.health <= 0:
             self.health = 0

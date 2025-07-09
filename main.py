@@ -28,6 +28,7 @@ class Neurotrace:
 
     def initPlayer(self):
         self.player = player.Player()
+        
 
     def initMap(self):
         self.level = 0
@@ -51,6 +52,9 @@ class Neurotrace:
     def update(self):
         # Reset player movement flag at the start of update
         self.player.is_moving = False
+        # Prevent all actions if player is dead
+        if not self.player.alive:
+            return
         
         # Player Movement 
         if pyxel.btn(pyxel.KEY_A):
