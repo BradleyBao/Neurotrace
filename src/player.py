@@ -28,13 +28,24 @@ class Player:
         self.dash_direction = 1  # 1 for right, -1 for left
         # Weapon system
         self.weapons = [
-            {'name': 'Pistol', 'color': 0, 'penetrate': False},
-            {'name': 'Rifle', 'color': 12, 'penetrate': True},
-            {'name': 'Sniper', 'color': 8, 'penetrate': True},
+            {'name': 'Pistol', 'color': 0, 'penetrate': False, 'max_ammo': 8},
+            {'name': 'Rifle', 'color': 12, 'penetrate': True, 'burst_count': 3, 'burst_delay': 3, 'max_ammo': 30},
+            {'name': 'Sniper', 'color': 8, 'penetrate': True, 'max_ammo': 10},
         ]
         self.current_weapon = 0
         self.bullets = []  # List of bullets: {'x', 'y', 'vx', 'vy', 'color', 'penetrate', 'alive'}
         self.weapon_offset = 5  # 1/3 of 16px
+        # Ammo system
+        self.ammo = [8, 30, 10]  # Current ammo for each weapon
+        # Reload system
+        self.reload_cooldown = 0
+        self.reload_cooldown_max = 120  # 2 seconds at 60fps
+        self.is_reloading = False
+        # Burst fire system
+        self.burst_firing = False
+        self.burst_timer = 0
+        self.burst_count = 0
+        self.burst_delay = 0
         # 8 directions: [L, R, R45U, L45U, L45D, R45D, D, U]
         self.weapon_sprites = [
             (0, 128),   # Left
@@ -113,7 +124,14 @@ class Player:
             self.dash_cooldown = self.dash_cooldown_max
 
     def fire(self, camera_x=0):
-        if not self.is_firing:
+        if not self.is_firing and not self.burst_firing:
+            # Check if we have ammo
+            if self.ammo[self.current_weapon] <= 0:
+                return  # No ammo, can't fire
+            # Check if reloading
+            if self.is_reloading:
+                return  # Can't fire while reloading
+            
             self.is_firing = True
             self.fire_timer = self.fire_duration
             player_screen_x = self.x - camera_x + 8
@@ -144,22 +162,44 @@ class Player:
                 self.weapon_fire_sprites = [
                     (32, 176), (40, 176), (32, 184), (40, 184), (48, 176), (56, 176), (48, 184), (56, 184)
                 ]
+            
+            # Handle different weapon types
             if weapon['name'] == 'Sniper':
                 self.fire_angle = angle
                 self.fire_line = self.calculate_fire_line(angle, camera_x)
+            elif weapon['name'] == 'Rifle':
+                # Start burst fire
+                self.burst_firing = True
+                self.burst_count = weapon['burst_count']
+                self.burst_delay = weapon['burst_delay']
+                self.fire_bullet(angle, weapon, camera_x)
             else:
-                speed = 8 if weapon['name'] == 'Rifle' else 5
-                bullet = {'x': self.x + 8 + math.cos(angle) * 2,
-                          'y': self.y + 8 + math.sin(angle) * 2,
-                          'vx': math.cos(angle) * speed,
-                          'vy': math.sin(angle) * speed,
-                          'color': weapon['color'],
-                          'penetrate': weapon['penetrate'],
-                          'alive': True,
-                          'damage': 1 if weapon['name']=='Pistol' else 2}
-                if weapon['name'] == 'Rifle':
-                    bullet['penetrate_count'] = 2
-                self.bullets.append(bullet)
+                # Pistol - single shot
+                self.fire_bullet(angle, weapon, camera_x)
+
+    def fire_bullet(self, angle, weapon, camera_x=0):
+        """Helper method to create and fire a bullet"""
+        # Consume ammo
+        self.ammo[self.current_weapon] -= 1
+        
+        speed = 8 if weapon['name'] == 'Rifle' else 5
+        bullet = {'x': self.x + 8 + math.cos(angle) * 2,
+                  'y': self.y + 8 + math.sin(angle) * 2,
+                  'vx': math.cos(angle) * speed,
+                  'vy': math.sin(angle) * speed,
+                  'color': weapon['color'],
+                  'penetrate': weapon['penetrate'],
+                  'alive': True,
+                  'damage': 1 if weapon['name']=='Pistol' else 2}
+        if weapon['name'] == 'Rifle':
+            bullet['penetrate_count'] = 2
+        self.bullets.append(bullet)
+
+    def reload_weapon(self):
+        """Start reloading the current weapon"""
+        if not self.is_reloading and self.reload_cooldown == 0:
+            self.is_reloading = True
+            self.reload_cooldown = self.reload_cooldown_max
 
     def update(self, level=0, camera_x=0, enemies=None):
         # If dead, disable all actions and set game status to Game Over
@@ -189,12 +229,44 @@ class Player:
             self.current_weapon = (self.current_weapon - 1) % len(self.weapons)
         if pyxel.btnp(pyxel.KEY_E):
             self.current_weapon = (self.current_weapon + 1) % len(self.weapons)
+        # Reload weapon
+        if pyxel.btnp(pyxel.KEY_R):
+            self.reload_weapon()
+        
+        # Reload cooldown logic
+        if self.is_reloading:
+            self.reload_cooldown -= 1
+            if self.reload_cooldown <= 0:
+                # Finish reload
+                weapon = self.weapons[self.current_weapon]
+                self.ammo[self.current_weapon] = weapon['max_ammo']
+                self.is_reloading = False
         # Firing logic
         if self.is_firing:
             self.fire_timer -= 1
             if self.fire_timer <= 0:
                 self.is_firing = False
                 self.fire_line = None
+        
+        # Burst fire logic
+        if self.burst_firing:
+            self.burst_delay -= 1
+            if self.burst_delay <= 0:
+                weapon = self.weapons[self.current_weapon]
+                if weapon['name'] == 'Rifle' and self.burst_count > 1:
+                    # Fire next bullet in burst
+                    player_screen_x = self.x - camera_x + 8
+                    player_screen_y = self.y + 8
+                    mx = pyxel.mouse_x
+                    my = pyxel.mouse_y
+                    angle = math.atan2(my - player_screen_y, mx - player_screen_x)
+                    self.fire_bullet(angle, weapon, camera_x)
+                    self.burst_count -= 1
+                    self.burst_delay = weapon['burst_delay']
+                else:
+                    # End burst
+                    self.burst_firing = False
+                    self.burst_count = 0
         # Update bullets
         for bullet in self.bullets:
             if not bullet['alive']:
@@ -380,7 +452,7 @@ class Player:
         angle = math.atan2(my - player_screen_y, mx - player_screen_x)
         angle_deg = math.degrees(angle)
         idx = self.get_weapon_direction_index_from_angle(angle_deg)
-        if self.is_firing:
+        if self.is_firing or self.burst_firing:
             sx, sy = self.weapon_fire_sprites[idx]
         else:
             sx, sy = self.weapon_sprites[idx]
@@ -413,7 +485,7 @@ class Player:
         else:
             return 1  # Default to Right
 
-    def draw(self, x_offset=0, camera_x=0):
+    def draw(self, x_offset=0, camera_x=0, level=0):
         # Draw player death sprite if dead
         if not self.alive:
             if self.facing_direction == 1:  # Right
@@ -459,6 +531,28 @@ class Player:
         pyxel.rect(bar_x, bar_y, int(bar_w * health_ratio), bar_h, 8)
         # Draw player health text
         pyxel.text(5, 5, f"HP: {self.health}/{self.max_health}", 7)
+        # Draw ammo text
+        weapon = self.weapons[self.current_weapon]
+        ammo_color = 7 if self.ammo[self.current_weapon] > 0 else 8  # White if has ammo, red if empty
+        pyxel.text(5, 15, f"{weapon['name']}: {self.ammo[self.current_weapon]}/{weapon['max_ammo']}", ammo_color)
+        
+        # Draw reload progress if reloading
+        if self.is_reloading:
+            reload_progress = 1.0 - (self.reload_cooldown / self.reload_cooldown_max)
+            bar_width = 50
+            bar_height = 3
+            bar_x = 5
+            bar_y = 25
+            pyxel.rect(bar_x, bar_y, bar_width, bar_height, 8)  # Background
+            pyxel.rect(bar_x, bar_y, int(bar_width * reload_progress), bar_height, 10)  # Progress
+            pyxel.text(bar_x, bar_y - 8, "RELOADING", 10)
+        
+        # Draw portal interaction hint if near portal
+        if "portal" in self.structure[level]:
+            portal_x, portal_y, portal_w, portal_h = self.structure[level]["portal"]
+            if (portal_x <= self.x <= portal_x + portal_w and 
+                portal_y <= self.y <= portal_y + portal_h):
+                pyxel.text(5, 35, "Press Z to enter portal", 10)
         # Draw shield icon and bar at bottom left
         icon_x = 2
         icon_y = pyxel.height - 12

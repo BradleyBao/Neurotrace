@@ -7,6 +7,9 @@ class Neurotrace:
     # === INIT AREA ===
 
     def __init__(self):
+        self.debug_mode = True  # Debug mode flag
+        self.door_open = False  # Door state
+        self.door_proximity_distance = 32  # Distance to trigger door opening
         self.initHelpers()  # Init Game Helpers 
         pyxel.init(settings.WINDOW_WIDTH, settings.WINDOW_HEIGHT, title=settings.GAME_TITLE, fps=settings.FPS)  # Init the game window
         pyxel.mouse(settings.CURSOR)  # Enable mouse cursor if specified in settings
@@ -50,6 +53,9 @@ class Neurotrace:
         pyxel.run(self.update, self.draw)
 
     def update(self):
+        # Toggle debug mode with F3
+        if pyxel.btnp(pyxel.KEY_F3):
+            self.debug_mode = not self.debug_mode
         # Reset player movement flag at the start of update
         self.player.is_moving = False
         # Prevent all actions if player is dead
@@ -82,6 +88,13 @@ class Neurotrace:
         if pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT):
             self.player.fire(self.camera_x)
 
+        # Portal interaction
+        if pyxel.btnp(pyxel.KEY_Z):
+            self.check_portal_interaction()
+
+        # Check door proximity and update door state
+        self.check_door_proximity()
+
         # Update player physics and animations
         self.player.update(self.level, self.camera_x, self.enemies)
 
@@ -98,16 +111,66 @@ class Neurotrace:
                     if self.line_intersects_rect(x0, y0, x1, y1, ex, ey, 16, 16):
                         enemy.take_damage(1)
 
+    def check_portal_interaction(self):
+        """Check if player is near portal and handle level transition"""
+        if "portal" in self.map.structure[self.level]:
+            portal_x, portal_y, portal_w, portal_h = self.map.structure[self.level]["portal"]
+            player_x, player_y = self.player.x, self.player.y
+            
+            # Check if player is within portal area
+            if (portal_x <= player_x <= portal_x + portal_w and 
+                portal_y <= player_y <= portal_y + portal_h):
+                self.transition_to_next_level()
+
+    def check_door_proximity(self):
+        """Check if player is near the door and update door state"""
+        if "portal" in self.map.structure[self.level]:
+            portal_x, portal_y, portal_w, portal_h = self.map.structure[self.level]["portal"]
+            player_x, player_y = self.player.x + 8, self.player.y + 8  # Player center
+            
+            # Calculate distance between player center and door center
+            door_center_x = portal_x + portal_w // 2
+            door_center_y = portal_y + portal_h // 2
+            distance = ((player_x - door_center_x) ** 2 + (player_y - door_center_y) ** 2) ** 0.5
+            
+            # Update door state based on proximity
+            self.door_open = distance <= self.door_proximity_distance
+
+    def transition_to_next_level(self):
+        """Transition to the next level"""
+        self.level += 1
+        if self.level in self.map.structure:
+            # Clear current enemies
+            self.enemies = []
+            # Spawn new enemies for the new level
+            for enemy_info in self.map.structure[self.level]["enemies"]:
+                type_index, x, y = enemy_info
+                self.enemies.append(create_enemy(type_index, x, y, self.level))
+            # Reset player position for new level
+            self.player.resetPlayerPos(self.level)
+        else:
+            # If no more levels, go back to level 0
+            self.level = 0
+            self.enemies = []
+            for enemy_info in self.map.structure[self.level]["enemies"]:
+                type_index, x, y = enemy_info
+                self.enemies.append(create_enemy(type_index, x, y, self.level))
+            self.player.resetPlayerPos(self.level)
+
     def draw(self):
         pyxel.cls(0)
         if self.GAME_STATUS.is_menu():
             self.GAME_STATUS.showGameTitle()
 
         if self.GAME_STATUS.is_playing():
-            self.map.drawMap(self.level, self.camera_x)
-            self.player.draw(self.camera_x)
+            self.map.drawMap(self.level, self.camera_x, self.door_open)
+            self.player.draw(self.camera_x, self.level)
             for enemy in self.enemies:
                 enemy.draw(self.camera_x, target=self.player)
+            # Debug: Show player coordinates if debug mode is on
+            if self.debug_mode:
+                px, py = int(self.player.x), int(self.player.y)
+                pyxel.text(5, pyxel.height - 20, f"Player: ({px}, {py})", 11)
             
     def line_intersects_rect(self, x0, y0, x1, y1, rx, ry, rw, rh):
         # Simple AABB vs line segment check
