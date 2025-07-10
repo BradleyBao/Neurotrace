@@ -76,7 +76,13 @@ class BaseEnemy:
         self.attack_cooldown = 0
         self.attack_cooldown_max = 60
         self.miss_chance = 0.2  # Default, override in subclasses
+        # Special ability system
         self.special_ability = None  # Placeholder, override in subclasses
+        self.special_cooldown = 0
+        self.special_cooldown_max = 120  # Default, override in subclasses
+        self.special_active = False
+        self.special_timer = 0
+        self.special_duration = 60  # Default, override in subclasses
         # Default sprite locations (can be overridden in subclasses)
         self.sprite_left = (0, 0)
         self.sprite_right = (16, 0)
@@ -85,6 +91,8 @@ class BaseEnemy:
         self.sprite_defeated_left = (64, 0)
         self.sprite_defeated_right = (80, 0)
         self.bullets = []  # List of bullets: {'x', 'y', 'vx', 'vy', 'color', 'penetrate', 'alive'}
+        # Grenade system
+        self.grenades = []  # List of grenades: {'x', 'y', 'vx', 'vy', 'timer', 'alive', 'exploded'}
 
     def take_damage(self, amount):
         if self.visual_state == "defeated":
@@ -97,6 +105,94 @@ class BaseEnemy:
             self.visual_state = "damage"
             self.visual_state_timer = 10  # Show damage sprite for 10 frames
 
+    def use_special_ability(self, player):
+        """Use special ability if cooldown is ready"""
+        if self.special_cooldown <= 0 and not self.special_active:
+            self.special_cooldown = self.special_cooldown_max
+            self.special_active = True
+            self.special_timer = self.special_duration
+            self.activate_special_ability(player)
+
+    def activate_special_ability(self, player):
+        """Override in subclasses to implement specific abilities"""
+        pass
+
+    def update_special_ability(self, player):
+        """Update special ability effects"""
+        if self.special_active:
+            self.special_timer -= 1
+            if self.special_timer <= 0:
+                self.special_active = False
+                self.deactivate_special_ability(player)
+        if self.special_cooldown > 0:
+            self.special_cooldown -= 1
+
+    def deactivate_special_ability(self, player):
+        """Override in subclasses to clean up ability effects"""
+        pass
+
+    def draw_special_effect(self, x_offset):
+        """Override in subclasses to draw special ability effects"""
+        pass
+
+    def throw_grenade(self, target_x, target_y):
+        """Throw a grenade towards target position"""
+        if self.special_cooldown <= 0:
+            # Calculate trajectory
+            dx = target_x - self.x
+            dy = target_y - self.y
+            distance = math.sqrt(dx*dx + dy*dy)
+            
+            # Normalize direction
+            if distance > 0:
+                dx /= distance
+                dy /= distance
+            
+            # Add some randomness and arc
+            speed = 2.0 + random.uniform(-0.5, 0.5)
+            vx = dx * speed
+            vy = dy * speed - 1.0  # Add upward arc
+            
+            grenade = {
+                'x': self.x + 8,
+                'y': self.y + 8,
+                'vx': vx,
+                'vy': vy,
+                'timer': 120,  # 2 seconds at 60fps
+                'alive': True,
+                'exploded': False
+            }
+            self.grenades.append(grenade)
+            self.special_cooldown = self.special_cooldown_max
+
+    def update_grenades(self, player):
+        """Update grenade physics and explosion"""
+        for grenade in self.grenades[:]:
+            if not grenade['alive']:
+                continue
+                
+            # Update position
+            grenade['x'] += grenade['vx']
+            grenade['y'] += grenade['vy']
+            grenade['vy'] += 0.1  # Gravity
+            
+            # Update timer
+            grenade['timer'] -= 1
+            
+            # Check for explosion
+            if grenade['timer'] <= 0 or grenade['y'] > 128:  # Hit ground or timer expired
+                grenade['exploded'] = True
+                grenade['alive'] = False
+                
+                # Check if player is in explosion radius
+                explosion_radius = 24
+                dx = grenade['x'] - (player.x + 8)
+                dy = grenade['y'] - (player.y + 8)
+                distance = math.sqrt(dx*dx + dy*dy)
+                
+                if distance <= explosion_radius:
+                    player.take_damage(3)  # Grenade damage
+
     def update(self, player, camera_x=0):
         if self.visual_state == "damage":
             self.visual_state_timer -= 1
@@ -106,6 +202,13 @@ class BaseEnemy:
             return
         if not self.alive:
             return
+            
+        # Update special ability
+        self.update_special_ability(player)
+        
+        # Update grenades
+        self.update_grenades(player)
+        
         distance_to_player = abs(player.x - self.x)
         # Smarter AI: check for platform edge before moving
         def will_fall_off_platform(dx):
@@ -173,6 +276,9 @@ class BaseEnemy:
                 if self.attack_cooldown == 0:
                     self.fire(player, camera_x)
                     self.attack_cooldown = self.attack_cooldown_max
+                # Try to use special ability during attack
+                if random.random() < 0.1:  # 10% chance per frame during attack
+                    self.use_special_ability(player)
         elif self.state == 'retreat':
             if self.retreat_timer > 0:
                 self.is_moving = True
@@ -333,6 +439,15 @@ class BaseEnemy:
         if self.weapon == 'Sniper' and self.is_firing and self.fire_line:
             x0, y0, x1, y1 = self.fire_line
             pyxel.line(x0 - x_offset, y0, x1 - x_offset, y1, 8)
+        
+        # Draw grenades
+        for grenade in self.grenades:
+            if grenade['alive']:
+                pyxel.blt(grenade['x'] - x_offset - 4, grenade['y'] - 4, 0, 0, 208, 8, 8, 0)
+        
+        # Draw special ability effects
+        if self.special_active:
+            self.draw_special_effect(x_offset)
 
     def draw_weapon(self, x_offset=0, target=None):
         # Use player weapon logic for aiming and facing
@@ -399,7 +514,9 @@ class RobotEnemy0(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(0, x, y, level)
         self.miss_chance = 0.75
-        self.special_ability = "Shield (placeholder)"
+        self.special_ability = "Shield"
+        self.special_cooldown_max = 180  # 3 seconds
+        self.special_duration = 120  # 2 seconds
         self.hp = 30
         self.sprite_left = (0, 16)
         self.sprite_right = (16, 16)
@@ -407,11 +524,37 @@ class RobotEnemy0(BaseEnemy):
         self.sprite_damage_right = (48, 16)
         self.sprite_defeated_left = (64, 16)
         self.sprite_defeated_right = (80, 16)
+        self.original_speed = self.speed
+
+    def activate_special_ability(self, player):
+        """Activate shield - reduces damage taken and slows movement"""
+        self.speed = self.original_speed * 0.5  # Slow down while shielded
+
+    def deactivate_special_ability(self, player):
+        """Deactivate shield"""
+        self.speed = self.original_speed
+
+    def take_damage(self, amount):
+        """Override to reduce damage when shield is active"""
+        if self.special_active:
+            amount = max(1, amount // 3)  # Reduce damage by 2/3 when shielded
+        super().take_damage(amount)
+
+    def draw_special_effect(self, x_offset):
+        """Draw shield effect"""
+        if self.special_active:
+            # Draw shield overlay
+            if self.facing_direction == 1:  # Right
+                pyxel.blt(self.x - x_offset + 4, self.y, 0, 32, 144, 16, 16, 14)
+            else:  # Left
+                pyxel.blt(self.x - x_offset - 4, self.y, 0, 48, 144, 16, 16, 14)
 class RobotEnemy1(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(1, x, y, level)
         self.miss_chance = 0.7
-        self.special_ability = "EMP (placeholder)"
+        self.special_ability = "EMP"
+        self.special_cooldown_max = 300  # 5 seconds
+        self.special_duration = 90  # 1.5 seconds
         self.hp = 35
         self.sprite_left = (0, 96)
         self.sprite_right = (16, 96)
@@ -419,11 +562,39 @@ class RobotEnemy1(BaseEnemy):
         self.sprite_damage_right = (48, 96)
         self.sprite_defeated_left = (64, 96)
         self.sprite_defeated_right = (80, 96)
+        self.emp_pulse_timer = 0
+
+    def activate_special_ability(self, player):
+        """Activate EMP - creates an electromagnetic pulse that damages player"""
+        self.emp_pulse_timer = 30  # Create initial pulse
+
+    def update_special_ability(self, player):
+        """Update EMP effects"""
+        super().update_special_ability(player)
+        if self.emp_pulse_timer > 0:
+            self.emp_pulse_timer -= 1
+            # Check if player is in EMP range
+            distance = abs(player.x - self.x)
+            if distance <= 48:  # EMP range
+                player.take_damage(1)  # Continuous damage during pulse
+
+    def draw_special_effect(self, x_offset):
+        """Draw EMP effect"""
+        if self.special_active:
+            # Draw EMP pulse
+            pulse_radius = 48 - (self.special_timer // 2)
+            if pulse_radius > 0:
+                # Draw expanding circle effect
+                for i in range(0, pulse_radius, 8):
+                    alpha = max(0, 15 - (i // 4))
+                    pyxel.circb(self.x - x_offset + 8, self.y + 8, i, alpha)
 class RobotEnemy2(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(2, x, y, level)
         self.miss_chance = 0.4
-        self.special_ability = "Rocket Jump (placeholder)"
+        self.special_ability = "Rocket Jump"
+        self.special_cooldown_max = 240  # 4 seconds
+        self.special_duration = 30  # 0.5 seconds
         self.hp = 45
         self.sprite_left = (0, 112)
         self.sprite_right = (16, 112)
@@ -431,12 +602,35 @@ class RobotEnemy2(BaseEnemy):
         self.sprite_damage_right = (48, 112)
         self.sprite_defeated_left = (64, 112)
         self.sprite_defeated_right = (80, 112)
+        self.rocket_jump_direction = 0
+
+    def activate_special_ability(self, player):
+        """Activate rocket jump - propels enemy upward and towards player"""
+        # Calculate jump direction towards player
+        if player.x > self.x:
+            self.rocket_jump_direction = 1
+        else:
+            self.rocket_jump_direction = -1
+        # Apply rocket jump force
+        self.velocity_y = -8  # Strong upward force
+        self.x += self.rocket_jump_direction * 16  # Horizontal boost
+
+    def draw_special_effect(self, x_offset):
+        """Draw rocket jump effect"""
+        if self.special_active:
+            # Draw rocket trail
+            trail_x = self.x - x_offset + 8
+            trail_y = self.y + 16
+            for i in range(3):
+                pyxel.pset(trail_x + random.randint(-2, 2), trail_y + i, 8)
 # Human Enemies
 class HumanEnemy0(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(3, x, y, level)
         self.miss_chance = 0.8
-        self.special_ability = "Roll (placeholder)"
+        self.special_ability = "Roll"
+        self.special_cooldown_max = 120  # 2 seconds
+        self.special_duration = 45  # 0.75 seconds
         self.hp = 20
         self.sprite_left = (0, 32)
         self.sprite_right = (16, 32)
@@ -444,11 +638,45 @@ class HumanEnemy0(BaseEnemy):
         self.sprite_damage_right = (48, 32)
         self.sprite_defeated_left = (64, 32)
         self.sprite_defeated_right = (80, 32)
+        self.original_speed = self.speed
+        self.roll_direction = 0
+
+    def activate_special_ability(self, player):
+        """Activate roll - quick dodge movement"""
+        self.speed = self.original_speed * 2.5  # Fast roll speed
+        # Roll away from player
+        if player.x > self.x:
+            self.roll_direction = -1
+        else:
+            self.roll_direction = 1
+        self.facing_direction = self.roll_direction
+
+    def deactivate_special_ability(self, player):
+        """Deactivate roll"""
+        self.speed = self.original_speed
+
+    def update_special_ability(self, player):
+        """Update roll movement"""
+        super().update_special_ability(player)
+        if self.special_active:
+            # Move in roll direction
+            self.x += self.roll_direction * self.speed
+
+    def draw_special_effect(self, x_offset):
+        """Draw roll effect"""
+        if self.special_active:
+            # Draw roll dust trail
+            trail_x = self.x - x_offset + 8
+            trail_y = self.y + 12
+            for i in range(2):
+                pyxel.pset(trail_x + random.randint(-3, 3), trail_y + i, 7)
 class HumanEnemy1(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(4, x, y, level)
         self.miss_chance = 0.6
-        self.special_ability = "Sprint (placeholder)"
+        self.special_ability = "Sprint"
+        self.special_cooldown_max = 180  # 3 seconds
+        self.special_duration = 90  # 1.5 seconds
         self.hp = 25
         self.sprite_left = (0, 48)
         self.sprite_right = (16, 48)
@@ -456,11 +684,31 @@ class HumanEnemy1(BaseEnemy):
         self.sprite_damage_right = (48, 48)
         self.sprite_defeated_left = (64, 48)
         self.sprite_defeated_right = (80, 48)
+        self.original_speed = self.speed
+
+    def activate_special_ability(self, player):
+        """Activate sprint - increased movement speed"""
+        self.speed = self.original_speed * 2.0  # Double speed
+
+    def deactivate_special_ability(self, player):
+        """Deactivate sprint"""
+        self.speed = self.original_speed
+
+    def draw_special_effect(self, x_offset):
+        """Draw sprint effect"""
+        if self.special_active:
+            # Draw speed lines
+            for i in range(3):
+                line_x = self.x - x_offset + random.randint(0, 16)
+                line_y = self.y + random.randint(0, 16)
+                pyxel.line(line_x, line_y, line_x - 8, line_y, 10)
 class HumanEnemy2(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(5, x, y, level)
         self.miss_chance = 0.3
-        self.special_ability = "Grenade (placeholder)"
+        self.special_ability = "Grenade"
+        self.special_cooldown_max = 360  # 6 seconds
+        self.special_duration = 10  # Short duration
         self.hp = 35
         self.sprite_left = (0, 64)
         self.sprite_right = (16, 64)
@@ -468,12 +716,58 @@ class HumanEnemy2(BaseEnemy):
         self.sprite_damage_right = (48, 64)
         self.sprite_defeated_left = (64, 64)
         self.sprite_defeated_right = (80, 64)
+
+    def activate_special_ability(self, player):
+        """Activate grenade throw"""
+        # Throw grenade at player position
+        self.throw_grenade(player.x + 8, player.y + 8)
+
+    def draw_special_effect(self, x_offset):
+        """Draw grenade throw effect"""
+        if self.special_active:
+            # Draw throwing animation
+            throw_x = self.x - x_offset + 8
+            throw_y = self.y + 4
+            pyxel.pset(throw_x, throw_y, 8)
 class HumanEnemy3(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(6, x, y, level)
         self.miss_chance = 0.1
-        self.special_ability = "Camouflage (placeholder)"
+        self.special_ability = "Camouflage"
+        self.special_cooldown_max = 420  # 7 seconds
+        self.special_duration = 150  # 2.5 seconds
         self.hp = 50
+        self.sprite_left = (0, 80)
+        self.sprite_right = (16, 80)
+        self.sprite_damage_left = (32, 80)
+        self.sprite_damage_right = (48, 80)
+        self.sprite_defeated_left = (64, 80)
+        self.sprite_defeated_right = (80, 80)
+        self.original_miss_chance = self.miss_chance
+
+    def activate_special_ability(self, player):
+        """Activate camouflage - become harder to hit"""
+        self.miss_chance = 0.8  # Much harder to hit when camouflaged
+
+    def deactivate_special_ability(self, player):
+        """Deactivate camouflage"""
+        self.miss_chance = self.original_miss_chance
+
+    def draw_special_effect(self, x_offset):
+        """Draw camouflage effect"""
+        if self.special_active:
+            # Draw camouflage overlay (semi-transparent)
+            if self.facing_direction == 1:  # Right
+                pyxel.blt(self.x - x_offset, self.y, 0, 0, 80, 16, 16, 0)
+            else:  # Left
+                pyxel.blt(self.x - x_offset, self.y, 0, 16, 80, 16, 16, 0)
+
+class HumanEnemy4(BaseEnemy):
+    def __init__(self, x, y, level=0):
+        super().__init__(7, x, y, level)
+        self.miss_chance = 0.1
+        self.special_ability = "Hacking (placeholder)"
+        self.hp = 20
         self.sprite_left = (0, 80)
         self.sprite_right = (16, 80)
         self.sprite_damage_left = (32, 80)

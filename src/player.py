@@ -550,8 +550,11 @@ class Player:
         # Draw portal interaction hint if near portal
         if "portal" in self.structure[level]:
             portal_x, portal_y, portal_w, portal_h = self.structure[level]["portal"]
-            if (portal_x <= self.x <= portal_x + portal_w and 
-                portal_y <= self.y <= portal_y + portal_h):
+            # Use player center coordinates to match portal interaction logic
+            player_center_x = self.x + 8
+            player_center_y = self.y + 8
+            if (portal_x <= player_center_x <= portal_x + portal_w and 
+                portal_y <= player_center_y <= portal_y + portal_h):
                 pyxel.text(5, 35, "Press Z to enter portal", 10)
         # Draw shield icon and bar at bottom left
         icon_x = 2
