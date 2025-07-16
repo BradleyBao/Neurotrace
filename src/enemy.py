@@ -3,6 +3,7 @@ import src.settings
 import src.structure
 import math
 import random
+# from src.enemy import create_enemy
 
 class BaseEnemy:
     def __init__(self, type_index, x, y, level=0):
@@ -775,6 +776,436 @@ class HumanEnemy4(BaseEnemy):
         self.sprite_defeated_left = (64, 80)
         self.sprite_defeated_right = (80, 80)
 
+class BossEnemy(BaseEnemy):
+    def __init__(self, x, y, level=0):
+        super().__init__(8, x, y, level)
+        self.hp = 1000
+        self.weapon = 'Rifle'
+        self.weapon_sprites = [
+            (0, 160), (8, 160), (0, 168), (8, 168), (16, 160), (24, 160), (16, 168), (24, 168)
+        ]
+        self.weapon_range = 100
+        self.weapon_ai = 'rifle'
+        # Sprite locations
+        self.sprite_left = (0, 224)
+        self.sprite_right = (16, 224)
+        self.sprite_damage_left = (96, 224)
+        self.sprite_damage_right = (112, 224)
+        self.sprite_defeated_left = (128, 224)
+        self.sprite_defeated_right = (144, 224)
+        # Walking animation
+        self.walk_left = [(32, 224), (48, 224)]
+        self.walk_right = [(64, 224), (80, 224)]
+        self.walk_anim_timer = 0
+        self.walk_anim_index = 0
+        # Teleport ability
+        self.teleport_cooldown_max = 360
+        self.teleport_cooldown = 0
+        self.teleporting = False
+        self.teleport_timer = 0
+        self.teleport_duration = 20
+        self.teleport_flash_timer = 0
+        self.teleport_flash_duration = 8
+        self.last_damage_time = -999
+        # EMP ability
+        self.emp_cooldown_max = 420
+        self.emp_cooldown = 0
+        self.emp_active = False
+        self.emp_wave_time = 30
+        self.emp_wave_timer = 0
+        self.emp_radius = 0
+        self.emp_max_radius = 96
+        self.emp_hit = False
+        # Shield Overload ability
+        self.shield_cooldown_max = 480  # 8 seconds
+        self.shield_cooldown = 0
+        self.shield_active = False
+        self.shield_duration = 90  # 1.5 seconds
+        self.shield_timer = 0
+        # Summon Minions ability
+        self.summon_cooldown_max = 600  # 10 seconds
+        self.summon_cooldown = 0
+        self.summon_active = False
+        self.summon_timer = 0
+        self.summon_flash = 0
+        self.summon_minions = []
+        # Teleport target defaults (for linter)
+        self._teleport_new_x = self.x
+        self._teleport_new_y = self.y
+        # Homing Grenades ability
+        self.grenade_cooldown_max = 360  # 6 seconds
+        self.grenade_cooldown = 0
+        self.grenade_active = False
+        self.grenade_timer = 0
+        self.homing_grenades = []  # List of {'x','y','vx','vy','timer','alive'}
+        # Berserk state
+        self.berserk = False
+        self.berserk_speed_mult = 1.7
+        self.berserk_attack_mult = 0.5  # 2x faster
+        # Gravity Well ability
+        self.gravitywell_cooldown_max = 540  # 9 seconds
+        self.gravitywell_cooldown = 0
+        self.gravitywell_active = False
+        self.gravitywell_timer = 0
+        self.gravitywell_duration = 60  # 1 second
+        self.gravitywell_point = (self.x, self.y)
+        self.gravitywell_radius = 64
+        self.gravitywell_pull_strength = 2.0
+
+    def take_damage(self, amount):
+        # If shield is active, ignore damage
+        if self.shield_active:
+            return
+        super().take_damage(amount)
+        # Trigger teleport if not on cooldown, not already teleporting, and alive
+        if self.alive and self.teleport_cooldown == 0 and not self.teleporting:
+            self.start_teleport()
+
+    def start_teleport(self):
+        self.teleporting = True
+        self.teleport_timer = self.teleport_duration
+        self.teleport_flash_timer = self.teleport_flash_duration
+        self.teleport_cooldown = self.teleport_cooldown_max
+        self.visual_state = "damage"
+        self._teleport_old_pos = (self.x, self.y)
+        main_floor = self.structure[self.level]["mapFloor"][0]
+        fx, fy, fw, fh = main_floor
+        min_x = fx + 8
+        max_x = fx + fw - 24
+        self._teleport_new_x = random.randint(min_x, max_x)
+        self._teleport_new_y = fy - 16
+
+    def update(self, player, camera_x=0, enemies=None):
+        # Berserk logic
+        if not self.berserk and self.hp < 500:
+            self.berserk = True
+            self.speed *= self.berserk_speed_mult
+            self.attack_cooldown_max = int(self.attack_cooldown_max * self.berserk_attack_mult)
+        # Gravity Well logic
+        if self.gravitywell_active:
+            self.gravitywell_timer -= 1
+            # Pull player toward gravity well point if in range
+            px, py = player.x + 8, player.y + 8
+            gx, gy = self.gravitywell_point
+            dx = gx - px
+            dy = gy - py
+            dist = math.hypot(dx, dy)
+            if dist < self.gravitywell_radius:
+                # Apply pull (reduce if very close)
+                pull = self.gravitywell_pull_strength * (1 - dist / self.gravitywell_radius)
+                if dist > 2:
+                    player.x += int(dx / dist * pull)
+                    player.y += int(dy / dist * pull)
+            if self.gravitywell_timer <= 0:
+                self.gravitywell_active = False
+                self.gravitywell_cooldown = self.gravitywell_cooldown_max
+            self.is_moving = False
+            self.attack_cooldown = self.attack_cooldown_max
+        # Homing Grenades logic
+        if self.grenade_active:
+            self.grenade_timer -= 1
+            if self.grenade_timer == 10:
+                # Launch 2-3 grenades
+                for i in range(random.randint(2, 3)):
+                    angle = random.uniform(-0.5, 0.5) + math.atan2(player.y - self.y, player.x - self.x)
+                    speed = 2.0
+                    vx = math.cos(angle) * speed
+                    vy = math.sin(angle) * speed
+                    grenade = {'x': self.x + 8, 'y': self.y + 8, 'vx': vx, 'vy': vy, 'timer': 90, 'alive': True}
+                    self.homing_grenades.append(grenade)
+            if self.grenade_timer <= 0:
+                self.grenade_active = False
+                self.grenade_cooldown = self.grenade_cooldown_max
+            self.is_moving = False
+            self.attack_cooldown = self.attack_cooldown_max
+        # Update homing grenades
+        for grenade in self.homing_grenades:
+            if not grenade['alive']:
+                continue
+            # Home in on player
+            dx = (player.x + 8) - grenade['x']
+            dy = (player.y + 8) - grenade['y']
+            dist = math.hypot(dx, dy)
+            if dist > 0:
+                dx /= dist
+                dy /= dist
+                grenade['vx'] += dx * 0.1
+                grenade['vy'] += dy * 0.1
+                # Clamp speed
+                speed = math.hypot(grenade['vx'], grenade['vy'])
+                max_speed = 2.5
+                if speed > max_speed:
+                    grenade['vx'] *= max_speed / speed
+                    grenade['vy'] *= max_speed / speed
+            grenade['x'] += grenade['vx']
+            grenade['y'] += grenade['vy']
+            grenade['timer'] -= 1
+            # Explosion on timer or close to player
+            if grenade['timer'] <= 0 or math.hypot(grenade['x'] - (player.x + 8), grenade['y'] - (player.y + 8)) < 12:
+                grenade['alive'] = False
+                # Damage player if close
+                if math.hypot(grenade['x'] - (player.x + 8), grenade['y'] - (player.y + 8)) < 20:
+                    player.take_damage(12)
+        # Remove dead grenades
+        self.homing_grenades = [g for g in self.homing_grenades if g['alive']]
+        # Summon Minions logic
+        if self.summon_active:
+            self.summon_timer -= 1
+            self.summon_flash += 1
+            if self.summon_timer == 10 and enemies is not None:
+                # Actually spawn minions (2-3 minions)
+                for i in range(random.randint(2, 3)):
+                    mx = self.x + random.randint(-24, 24)
+                    my = self.y
+                    minion_type = random.choice([0, 3])  # Robot or Human
+                    minion = create_enemy(minion_type, mx, my, self.level)
+                    enemies.append(minion)
+                    self.summon_minions.append((mx, my))
+            if self.summon_timer <= 0:
+                self.summon_active = False
+                self.summon_cooldown = self.summon_cooldown_max
+                self.summon_minions = []
+            self.is_moving = False
+            self.attack_cooldown = self.attack_cooldown_max
+        # Shield Overload logic
+        elif self.shield_active:
+            self.shield_timer -= 1
+            if self.shield_timer <= 0:
+                self.shield_active = False
+                self.shield_cooldown = self.shield_cooldown_max
+            self.is_moving = False
+            self.attack_cooldown = self.attack_cooldown_max
+        # EMP logic
+        elif self.emp_active:
+            self.emp_wave_timer -= 1
+            self.emp_radius = int(self.emp_max_radius * (1 - self.emp_wave_timer / self.emp_wave_time))
+            if self.emp_wave_timer == self.emp_wave_time // 2 and not self.emp_hit:
+                dx = (self.x + 8) - (player.x + 8)
+                dy = (self.y + 8) - (player.y + 8)
+                if math.hypot(dx, dy) <= self.emp_max_radius:
+                    if hasattr(player, 'apply_emp_debuff'):
+                        player.apply_emp_debuff(120)
+                    self.emp_hit = True
+            if self.emp_wave_timer <= 0:
+                self.emp_active = False
+                self.emp_cooldown = self.emp_cooldown_max
+                self.emp_radius = 0
+                self.emp_hit = False
+            self.is_moving = False
+            self.attack_cooldown = self.attack_cooldown_max
+        # Teleport logic (takes priority over all other actions)
+        elif self.teleporting:
+            self.teleport_timer -= 1
+            if self.teleport_flash_timer > 0:
+                self.teleport_flash_timer -= 1
+            if self.teleport_timer == self.teleport_duration // 2:
+                self.x = self._teleport_new_x
+                self.y = self._teleport_new_y
+            if self.teleport_timer <= 0:
+                self.teleporting = False
+                self.visual_state = "normal"
+        else:
+            if self.teleport_cooldown > 0:
+                self.teleport_cooldown -= 1
+            if self.emp_cooldown > 0:
+                self.emp_cooldown -= 1
+            if self.shield_cooldown > 0:
+                self.shield_cooldown -= 1
+            if self.summon_cooldown > 0:
+                self.summon_cooldown -= 1
+            if self.grenade_cooldown > 0:
+                self.grenade_cooldown -= 1
+            if self.gravitywell_cooldown > 0:
+                self.gravitywell_cooldown -= 1
+            # AI: Homing Grenades
+            if not self.grenade_active and not self.teleporting and self.grenade_cooldown == 0:
+                if random.random() < 0.01:
+                    self.grenade_active = True
+                    self.grenade_timer = 30
+            # AI: Summon Minions
+            elif not self.summon_active and not self.teleporting and self.summon_cooldown == 0:
+                if random.random() < 0.01:
+                    self.summon_active = True
+                    self.summon_timer = 30
+                    self.summon_flash = 0
+                    self.summon_minions = []
+            # AI: Shield Overload
+            elif not self.shield_active and not self.teleporting and self.shield_cooldown == 0:
+                if random.random() < 0.01:
+                    self.shield_active = True
+                    self.shield_timer = self.shield_duration
+            # AI: EMP wave
+            elif not self.emp_active and not self.teleporting and self.emp_cooldown == 0:
+                if random.random() < 0.01:
+                    self.emp_active = True
+                    self.emp_wave_timer = self.emp_wave_time
+                    self.emp_radius = 0
+                    self.emp_hit = False
+            # AI: Gravity Well
+            elif not self.gravitywell_active and not self.teleporting and self.gravitywell_cooldown == 0:
+                if random.random() < 0.01:
+                    self.gravitywell_active = True
+                    self.gravitywell_timer = self.gravitywell_duration
+                    # Target a point near the player (but not directly on top)
+                    px, py = player.x + 8, player.y + 8
+                    angle = random.uniform(0, 2 * math.pi)
+                    radius = random.randint(24, 48)
+                    gx = px + int(math.cos(angle) * radius)
+                    gy = py + int(math.sin(angle) * radius)
+                    self.gravitywell_point = (gx, gy)
+            super().update(player, camera_x)
+        # Walking animation logic
+        if self.visual_state == "normal" and self.is_moving:
+            self.walk_anim_timer += 1
+            if self.walk_anim_timer >= 8:
+                self.walk_anim_timer = 0
+                self.walk_anim_index = (self.walk_anim_index + 1) % 2
+
+    def draw(self, x_offset=0, target=None):
+        # Berserk visual effect
+        if self.berserk:
+            px = self.x - x_offset
+            py = self.y
+            pyxel.circb(px + 8, py + 8, 18, 8)
+        # Homing Grenades visual
+        for grenade in self.homing_grenades:
+            if grenade['alive']:
+                pyxel.blt(grenade['x'] - x_offset - 4, grenade['y'] - 4, 0, 0, 208, 8, 8, 14)
+                pyxel.circb(grenade['x'] - x_offset + 0, grenade['y'] + 0, 10, 10)
+        # Summon Minions visual effect
+        if self.summon_active:
+            for mx, my in self.summon_minions:
+                color = 10 if (self.summon_flash // 4) % 2 == 0 else 7
+                pyxel.circb(mx - x_offset + 8, my + 8, 12, color)
+        # Shield Overload effect
+        if self.shield_active:
+            px = self.x - x_offset
+            py = self.y
+            pyxel.circb(px + 8, py + 8, 14, 12)
+            pyxel.circb(px + 8, py + 8, 16, 7)
+        # EMP wave effect
+        if self.emp_active:
+            pyxel.circ(self.x - x_offset + 8, self.y + 8, self.emp_radius, 9)
+            pyxel.circb(self.x - x_offset + 8, self.y + 8, self.emp_radius, 7)
+        # Gravity Well visual effect
+        if self.gravitywell_active:
+            gx, gy = self.gravitywell_point
+            color = 13 if (self.gravitywell_timer // 4) % 2 == 0 else 7
+            pyxel.circ(gx - x_offset, gy, self.gravitywell_radius, color)
+            pyxel.circ(gx - x_offset, gy, int(self.gravitywell_radius * (self.gravitywell_timer / self.gravitywell_duration)), 10)
+            pyxel.text(gx - x_offset - 12, gy - 8, "GRAVITY WELL", 13)
+        # Boss health bar
+        if isinstance(self, BossEnemy):
+            bar_w = 40
+            bar_h = 5
+            bar_x = self.x - x_offset + 8 - bar_w // 2
+            bar_y = self.y - 18
+            pct = max(0, self.hp / 1000)
+            pyxel.rect(bar_x, bar_y, bar_w, bar_h, 1)
+            pyxel.rect(bar_x, bar_y, int(bar_w * pct), bar_h, 8)
+            percent_text = f"BOSS {int(pct*100)}%"
+            pyxel.text(bar_x, bar_y - 7, percent_text, 8)
+        # Teleport flash effect
+        if self.teleporting and self.teleport_flash_timer > 0:
+            ox, oy = getattr(self, '_teleport_old_pos', (self.x, self.y))
+            nx = getattr(self, '_teleport_new_x', self.x)
+            ny = getattr(self, '_teleport_new_y', self.y)
+            pyxel.circ(ox - x_offset + 8, oy + 8, 12, 10)
+            pyxel.circ(nx - x_offset + 8, ny + 8, 12, 10)
+        # Draw boss as usual
+        if self.visual_state == "defeated":
+            sx, sy = self.sprite_defeated_right if self.facing_direction == 1 else self.sprite_defeated_left
+        elif self.visual_state == "damage":
+            sx, sy = self.sprite_damage_right if self.facing_direction == 1 else self.sprite_damage_left
+        elif self.visual_state == "normal" and self.is_moving:
+            if self.facing_direction == 1:
+                sx, sy = self.walk_right[self.walk_anim_index]
+            else:
+                sx, sy = self.walk_left[self.walk_anim_index]
+        else:
+            sx, sy = self.sprite_right if self.facing_direction == 1 else self.sprite_left
+        pyxel.blt(self.x - x_offset, self.y, 0, sx, sy, 16, 16, 14)
+        if self.visual_state != "defeated":
+            self.draw_weapon(x_offset, target)
+        # Draw bullets
+        for bullet in self.bullets:
+            if bullet['alive']:
+                pyxel.circ(bullet['x'] - x_offset, bullet['y'], 1, bullet['color'])
+
+    def draw_weapon(self, x_offset=0, target=None):
+        # Use player weapon logic for aiming and facing
+        if target is not None:
+            enemy_screen_x = self.x - x_offset + 8
+            enemy_screen_y = self.y + 8
+            player_screen_x = target.x - x_offset + 8
+            player_screen_y = target.y + 8
+            angle = math.atan2(player_screen_y - enemy_screen_y, player_screen_x - enemy_screen_x)
+        else:
+            angle = 0
+        angle_deg = math.degrees(angle)
+        if angle_deg < 0:
+            angle_deg += 360
+        if 157.5 <= angle_deg < 202.5:
+            idx = 0  # Left
+        elif angle_deg < 22.5 or angle_deg >= 337.5:
+            idx = 1  # Right
+        elif 22.5 <= angle_deg < 67.5:
+            idx = 5  # Right 45 Up
+        elif 112.5 <= angle_deg < 157.5:
+            idx = 4  # Left 45 Up
+        elif 202.5 <= angle_deg < 247.5:
+            idx = 3  # Left 45 Down
+        elif 292.5 <= angle_deg < 337.5:
+            idx = 2  # Right 45 Down
+        elif 247.5 <= angle_deg < 292.5:
+            idx = 7  # Down
+        elif 67.5 <= angle_deg < 112.5:
+            idx = 6  # Up
+        else:
+            idx = 1  # Default to Right
+        sx, sy = self.weapon_sprites[idx]
+        enemy_screen_x = self.x - x_offset + 8
+        enemy_screen_y = self.y + 8
+        wx = int(enemy_screen_x + math.cos(angle) * 8 - self.weapon_w // 2)
+        wy = int(enemy_screen_y + math.sin(angle) * 8 - self.weapon_h // 2)
+        pyxel.blt(wx, wy, 0, sx, sy, self.weapon_w, self.weapon_h, 14)
+
+    @staticmethod
+    def line_intersects_rect(x0, y0, x1, y1, rx, ry, rw, rh):
+        # Simple AABB vs line segment check
+        if rx <= x0 <= rx+rw and ry <= y0 <= ry+rh:
+            return True
+        if rx <= x1 <= rx+rw and ry <= y1 <= ry+rh:
+            return True
+        def ccw(A, B, C):
+            return (C[1]-A[1]) * (B[0]-A[0]) > (B[1]-A[1]) * (C[0]-A[0])
+        def intersect(A,B,C,D):
+            return ccw(A,C,D) != ccw(B,C,D) and ccw(A,B,C) != ccw(A,B,D)
+        rect_edges = [
+            ((rx,ry), (rx+rw,ry)),
+            ((rx+rw,ry), (rx+rw,ry+rh)),
+            ((rx+rw,ry+rh), (rx,ry+rh)),
+            ((rx,ry+rh), (rx,ry)),
+        ]
+        for edge in rect_edges:
+            if intersect((x0,y0), (x1,y1), edge[0], edge[1]):
+                return True
+        return False
+
+    def wide_laser_intersects_player(self, x0, y0, x1, y1, player):
+        # Check if player rectangle intersects a wide laser beam (width 12)
+        px, py, pw, ph = player.x, player.y, 16, 16
+        # Sample points along the laser and check if within width
+        for t in range(0, 101, 5):
+            lx = x0 + (x1 - x0) * t / 100
+            ly = y0 + (y1 - y0) * t / 100
+            # Distance from player center to laser line
+            cx, cy = px + pw/2, py + ph/2
+            dist = abs((y1 - y0) * cx - (x1 - x0) * cy + x1*y0 - y1*x0) / (math.hypot(x1 - x0, y1 - y0) + 1e-6)
+            if dist < 8 and px <= lx <= px+pw and py <= ly <= py+ph:
+                return True
+        return False
+
 def create_enemy(type_index, x, y, level=0):
     if type_index == 0:
         return RobotEnemy0(x, y, level)
@@ -790,5 +1221,7 @@ def create_enemy(type_index, x, y, level=0):
         return HumanEnemy2(x, y, level)
     elif type_index == 6:
         return HumanEnemy3(x, y, level)
+    elif type_index == 8:
+        return BossEnemy(x, y, level)
     else:
         return BaseEnemy(type_index, x, y, level) 

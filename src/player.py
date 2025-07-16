@@ -87,6 +87,11 @@ class Player:
         self.shield_stamina_max = 600
         self.shield_cooldown = 0  # frames
         self.shield_cooldown_max = 600  # 10 seconds
+        self.emp_debuff_timer = 0
+        # Med kit system
+        self.medkits = 10
+        self.medkit_heal = 50
+        self.medkit_feedback_timer = 0
 
     def loadAnimation(self):
         self.walk_left = [(48, 0), (64, 0)]
@@ -124,6 +129,8 @@ class Player:
             self.dash_cooldown = self.dash_cooldown_max
 
     def fire(self, camera_x=0):
+        if self.emp_debuff_timer > 0:
+            return  # Block firing during EMP debuff
         if not self.is_firing and not self.burst_firing:
             # Check if we have ammo
             if self.ammo[self.current_weapon] <= 0:
@@ -201,6 +208,9 @@ class Player:
             self.is_reloading = True
             self.reload_cooldown = self.reload_cooldown_max
 
+    def apply_emp_debuff(self, duration):
+        self.emp_debuff_timer = duration
+
     def update(self, level=0, camera_x=0, enemies=None):
         # If dead, disable all actions and set game status to Game Over
         if not self.alive:
@@ -224,13 +234,17 @@ class Player:
                 self.is_dashing = False
         elif self.dash_cooldown > 0:
             self.dash_cooldown -= 1
+        # EMP debuff logic
+        if self.emp_debuff_timer > 0:
+            self.emp_debuff_timer -= 1
         # Weapon switching
-        if pyxel.btnp(pyxel.KEY_Q):
-            self.current_weapon = (self.current_weapon - 1) % len(self.weapons)
-        if pyxel.btnp(pyxel.KEY_E):
-            self.current_weapon = (self.current_weapon + 1) % len(self.weapons)
+        if self.emp_debuff_timer == 0:
+            if pyxel.btnp(pyxel.KEY_Q):
+                self.current_weapon = (self.current_weapon - 1) % len(self.weapons)
+            if pyxel.btnp(pyxel.KEY_E):
+                self.current_weapon = (self.current_weapon + 1) % len(self.weapons)
         # Reload weapon
-        if pyxel.btnp(pyxel.KEY_R):
+        if self.emp_debuff_timer == 0 and pyxel.btnp(pyxel.KEY_R):
             self.reload_weapon()
         
         # Reload cooldown logic
@@ -341,23 +355,36 @@ class Player:
             self.animation_frame = 0
             self.animation_timer = 0
         # Shield stamina and cooldown logic
-        if pyxel.btn(pyxel.KEY_SHIFT) and self.shield_stamina > 0 and self.shield_cooldown == 0:
-            self.is_shielding = True
-            self.speed = self.shield_speed
-            self.shield_stamina -= 1
-            if self.shield_stamina <= 0:
-                self.shield_stamina = 0
+        if self.emp_debuff_timer == 0:
+            if pyxel.btn(pyxel.KEY_SHIFT) and self.shield_stamina > 0 and self.shield_cooldown == 0:
+                self.is_shielding = True
+                self.speed = self.shield_speed
+                self.shield_stamina -= 1
+                if self.shield_stamina <= 0:
+                    self.shield_stamina = 0
+                    self.is_shielding = False
+                    self.shield_cooldown = self.shield_cooldown_max
+                    self.speed = self.normal_speed
+            else:
+                if self.is_shielding:
+                    self.speed = self.normal_speed
                 self.is_shielding = False
-                self.shield_cooldown = self.shield_cooldown_max
-                self.speed = self.normal_speed
+                if self.shield_cooldown > 0:
+                    self.shield_cooldown -= 1
+                elif self.shield_stamina < self.shield_stamina_max:
+                    self.shield_stamina += 1
         else:
-            if self.is_shielding:
-                self.speed = self.normal_speed
             self.is_shielding = False
-            if self.shield_cooldown > 0:
-                self.shield_cooldown -= 1
-            elif self.shield_stamina < self.shield_stamina_max:
-                self.shield_stamina += 1
+            self.speed = self.normal_speed
+        # Med kit use (press X)
+        if self.emp_debuff_timer == 0 and pyxel.btnp(pyxel.KEY_X):
+            if self.medkits > 0 and self.health < self.max_health:
+                self.medkits -= 1
+                self.health = min(self.max_health, self.health + self.medkit_heal)
+                self.medkit_feedback_timer = 30  # Show feedback for 0.5s
+        # Med kit feedback timer
+        if self.medkit_feedback_timer > 0:
+            self.medkit_feedback_timer -= 1
 
     def calculate_fire_line(self, angle, camera_x=0):
         # Start at gun muzzle
@@ -534,18 +561,41 @@ class Player:
         # Draw ammo text
         weapon = self.weapons[self.current_weapon]
         ammo_color = 7 if self.ammo[self.current_weapon] > 0 else 8  # White if has ammo, red if empty
-        pyxel.text(5, 15, f"{weapon['name']}: {self.ammo[self.current_weapon]}/{weapon['max_ammo']}", ammo_color)
         
+        
+        # Draw weapons 
+        if self.weapons[self.current_weapon]['name'] == 'Sniper':
+            sniper_sprite = (8, 192)
+            icon_x = 12
+            icon_y = pyxel.height - 12
+            pyxel.blt(icon_x, icon_y, 0, sniper_sprite[0], sniper_sprite[1], 8, 8, 14)
+        elif self.weapons[self.current_weapon]['name'] == "Rifle":
+            rifal_sprite = (0, 200)
+            icon_x = 12
+            icon_y = pyxel.height - 12
+            pyxel.blt(icon_x, icon_y, 0, rifal_sprite[0], rifal_sprite[1], 8, 8, 14)
+
+        else:
+            pistal_sprite = (8, 200)
+            icon_x = 12
+            icon_y = pyxel.height - 12
+            pyxel.blt(icon_x, icon_y, 0, pistal_sprite[0], pistal_sprite[1], 8, 8, 14)
+
+        
+
         # Draw reload progress if reloading
         if self.is_reloading:
             reload_progress = 1.0 - (self.reload_cooldown / self.reload_cooldown_max)
-            bar_width = 50
-            bar_height = 3
-            bar_x = 5
-            bar_y = 25
+            bar_width = 8
+            bar_height = 2
+            bar_x = 12
+            bar_y = pyxel.height - 3
             pyxel.rect(bar_x, bar_y, bar_width, bar_height, 8)  # Background
             pyxel.rect(bar_x, bar_y, int(bar_width * reload_progress), bar_height, 10)  # Progress
-            pyxel.text(bar_x, bar_y - 8, "RELOADING", 10)
+            # pyxel.text(bar_x, bar_y - 8, "RELOADING", 10)
+        else:
+            # pyxel.text(12, pyxel.height - 4, f"{self.ammo[self.current_weapon]}/{weapon['max_ammo']}", ammo_color)
+            pyxel.text(12, pyxel.height - 4, f"{self.ammo[self.current_weapon]}", ammo_color)
         
         # Draw portal interaction hint if near portal
         if "portal" in self.structure[level]:
@@ -578,6 +628,17 @@ class Player:
         if self.weapons[self.current_weapon]['name'] == 'Sniper' and self.is_firing and self.fire_line:
             x0, y0, x1, y1 = self.fire_line
             pyxel.line(x0 - x_offset, y0, x1 - x_offset, y1, 8)
+        # EMP debuff visual effect
+        if self.emp_debuff_timer > 0:
+            px = int(self.x - x_offset)
+            py = int(self.y)
+            pyxel.circb(px + 8, py + 8, 14, 9)
+            pyxel.circb(px + 8, py + 8, 16, 7)
+        # Draw med kit count and feedback
+        pyxel.blt(5, 45, 0, 8, 208, 8, 8, 14)  # Med kit icon (assume at 0,200)
+        pyxel.text(16, 47, f"x{self.medkits}", 7)
+        if self.medkit_feedback_timer > 0:
+            pyxel.text(self.x - x_offset, self.y - 20, f"+{self.medkit_heal} HP", 11)
 
     @staticmethod
     def line_intersects_rect(x0, y0, x1, y1, rx, ry, rw, rh):

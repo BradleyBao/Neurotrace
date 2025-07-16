@@ -100,7 +100,11 @@ class Neurotrace:
 
         # Update enemies
         for enemy in self.enemies:
-            enemy.update(self.player, self.camera_x)
+            # Pass enemies list to BossEnemy for summoning
+            if hasattr(enemy, 'summon_active'):
+                enemy.update(self.player, self.camera_x, self.enemies)
+            else:
+                enemy.update(self.player, self.camera_x)
 
         # Check for collisions
         if self.player.is_firing and self.player.fire_line:
@@ -114,27 +118,30 @@ class Neurotrace:
     def check_portal_interaction(self):
         """Check if player is near portal and handle level transition"""
         if "portal" in self.map.structure[self.level]:
-            portal_x, portal_y, portal_w, portal_h = self.map.structure[self.level]["portal"]
-            player_x, player_y = self.player.x, self.player.y
-            
-            # Check if player is within portal area
-            if (portal_x <= player_x <= portal_x + portal_w and 
-                portal_y <= player_y <= portal_y + portal_h):
-                self.transition_to_next_level()
+            portal = self.map.structure[self.level]["portal"]
+            if portal is not None:
+                portal_x, portal_y, portal_w, portal_h = portal
+                player_x, player_y = self.player.x, self.player.y
+                # Check if player is within portal area
+                if (portal_x <= player_x <= portal_x + portal_w and 
+                    portal_y <= player_y <= portal_y + portal_h):
+                    self.transition_to_next_level()
 
     def check_door_proximity(self):
         """Check if player is near the door and update door state"""
         if "portal" in self.map.structure[self.level]:
-            portal_x, portal_y, portal_w, portal_h = self.map.structure[self.level]["portal"]
-            player_x, player_y = self.player.x + 8, self.player.y + 8  # Player center
-            
-            # Calculate distance between player center and door center
-            door_center_x = portal_x + portal_w // 2
-            door_center_y = portal_y + portal_h // 2
-            distance = ((player_x - door_center_x) ** 2 + (player_y - door_center_y) ** 2) ** 0.5
-            
-            # Update door state based on proximity
-            self.door_open = distance <= self.door_proximity_distance
+            portal = self.map.structure[self.level]["portal"]
+            if portal is not None:
+                portal_x, portal_y, portal_w, portal_h = portal
+                player_x, player_y = self.player.x + 8, self.player.y + 8  # Player center
+                # Calculate distance between player center and door center
+                door_center_x = portal_x + portal_w // 2
+                door_center_y = portal_y + portal_h // 2
+                distance = ((player_x - door_center_x) ** 2 + (player_y - door_center_y) ** 2) ** 0.5
+                # Update door state based on proximity
+                self.door_open = distance <= self.door_proximity_distance
+            else:
+                self.door_open = False
 
     def transition_to_next_level(self):
         """Transition to the next level"""

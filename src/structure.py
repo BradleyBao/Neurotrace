@@ -60,11 +60,57 @@ STRUCTURE = {
             (4, 750, 112),  # type 1 at (750, 112)
             (4, 200, 80),   # type 0 on platform 1
             (4, 600, 80),   # type 1 on platform 3
+            (5, 600, 80),   # type 1 on platform 3
+            (2, 1000, 80),   # type 2 on platform 3
         ],
         "mapWall": [
             (0, 384, 8, 128),            # Left wall
             (128*8-8, 384, 16, 128),     # Right wall
         ],
         "portal": (128*8-40, 112-16, 16, 16),  # Portal at (984, 96) with size 16x16
+    },
+    3: {
+        "playerInitPos": (0, 112),
+        "mapUV": (0, 512),
+        "mapWH": (128*10, 128),
+        "mapFloor": [
+            (0, 112, 128*10, 16),  # Main floor
+            (250, 80, 75, 16),    # Platform 1
+            # (500, 60, 75, 16),    # Platform 2
+            # (750, 80, 75, 16),    # Platform 3
+            # (950, 40, 75, 16),    # Platform 4 (higher)
+        ],
+        "enemies": [
+            (4, 200, 112),   # type 0 on main floor
+            (5, 400, 112),   # type 1 on main floor
+            (4, 600, 112),   # type 0 on main floor
+            (5, 800, 112),   # type 1 on main floor
+            (2, 1000, 112),  # type 2 on main floor
+            (4, 250, 80),    # type 0 on platform 1
+            (5, 500, 60),    # type 1 on platform 2
+            (4, 750, 80),    # type 0 on platform 3
+            (2, 950, 40),    # type 2 on platform 4
+        ],
+        "mapWall": [
+            (0, 512, 8, 128),                # Left wall
+            (128*10-8, 512, 16, 128),        # Right wall
+        ],
+        "portal": (128*10-40, 112-16, 16, 16),  # Portal at (1240, 96)
+    },
+    4: {
+        "playerInitPos": (0, 112),
+        "mapUV": (0, 640),
+        "mapWH": (128*6, 128),
+        "mapFloor": [
+            (0, 112, 128*6, 16),  # Main floor
+        ],
+        "enemies": [
+            (8, 600, 112),  # Boss enemy with sniper weapon at center-ish
+        ],
+        "mapWall": [
+            (0, 640, 8, 128),                # Left wall
+            (128*6-8, 640, 16, 128),         # Right wall
+        ],
+        "portal": (128*6-40, 112-16, 16, 16),  # Portal at (728, 96)
     },
 }

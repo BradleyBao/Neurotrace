@@ -13,12 +13,12 @@ class Map():
         
         # Draw portal if it exists in this level
         if "portal" in self.structure[level]:
-            portal_x, portal_y, portal_w, portal_h = self.structure[level]["portal"]
-            # Draw closed door sprite at (0, 72) - always visible
-            
-            # Draw open door sprite on top when door is open
-            if door_open:
-                pyxel.blt(portal_x - camera_x, portal_y, 1, 0, 80, portal_w, portal_h, 0)
-            else:
-                pyxel.blt(portal_x - camera_x, portal_y, 1, 32, 0, portal_w, portal_h, 0)
+            portal = self.structure[level]["portal"]
+            if portal is not None:
+                portal_x, portal_y, portal_w, portal_h = portal
+                # Draw closed door sprite at (0, 72) - always visible
+                if door_open:
+                    pyxel.blt(portal_x - camera_x, portal_y, 1, 0, 80, portal_w, portal_h, 0)
+                else:
+                    pyxel.blt(portal_x - camera_x, portal_y, 1, 32, 0, portal_w, portal_h, 0)
         
