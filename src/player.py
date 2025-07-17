@@ -525,7 +525,7 @@ class Player:
             bar_w = 16
             bar_h = 2
             pyxel.rect(bar_x, bar_y, 0, bar_h, 8)
-            pyxel.text(5, 5, f"HP: 0/{self.max_health}", 7)
+            pyxel.text(5, 2, f"HP: 0/{self.max_health}", 7)
             return
         # Draw player sprite
         if self.is_moving:
@@ -557,7 +557,7 @@ class Player:
         health_ratio = self.health / self.max_health
         pyxel.rect(bar_x, bar_y, int(bar_w * health_ratio), bar_h, 8)
         # Draw player health text
-        pyxel.text(5, 5, f"HP: {self.health}/{self.max_health}", 7)
+        pyxel.text(5, 2, f"HP: {self.health}/{self.max_health}", 7)
         # Draw ammo text
         weapon = self.weapons[self.current_weapon]
         ammo_color = 7 if self.ammo[self.current_weapon] > 0 else 8  # White if has ammo, red if empty
@@ -635,8 +635,8 @@ class Player:
             pyxel.circb(px + 8, py + 8, 14, 9)
             pyxel.circb(px + 8, py + 8, 16, 7)
         # Draw med kit count and feedback
-        pyxel.blt(5, 45, 0, 8, 208, 8, 8, 14)  # Med kit icon (assume at 0,200)
-        pyxel.text(16, 47, f"x{self.medkits}", 7)
+        pyxel.blt(22, pyxel.height - 12, 0, 8, 208, 8, 8, 14)  # Med kit icon 
+        pyxel.text(20, pyxel.height - 4, f"x{self.medkits}", 7)
         if self.medkit_feedback_timer > 0:
             pyxel.text(self.x - x_offset, self.y - 20, f"+{self.medkit_heal} HP", 11)
 
