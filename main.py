@@ -65,7 +65,12 @@ class Neurotrace:
             self.debug_mode = not self.debug_mode
 
         if self.debug_mode:
-            self.player.speed = 10
+            if pyxel.btnp(pyxel.KEY_0):
+                self.player.speed += 1
+            if pyxel.btnp(pyxel.KEY_9):
+                self.player.speed -= 1
+        else:
+            self.player.speed = settings.PLAYER_SPEED
 
         # Toggle god_mode with F4 Key 
         if pyxel.btnp(pyxel.KEY_F4):
@@ -240,6 +245,7 @@ class Neurotrace:
                 pyxel.text(5, 25, f"Player: ({px}, {py})", 11)
                 pyxel.text(5, 35, f"God Mode: {"Yes" if self.god_mode else "No"}", 11)
                 pyxel.text(5, 45, f"Infinite Ammo: {"Yes" if self.infinite_ammo else "No"}", 11)
+                pyxel.text(5, 55, f"Player Speed: {self.player.speed}", 11)
             
     def line_intersects_rect(self, x0, y0, x1, y1, rx, ry, rw, rh):
         """This function checks collision"""
