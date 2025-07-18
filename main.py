@@ -77,7 +77,7 @@ class Neurotrace:
 
         # if player in infinite ammo, always in full ammo 
         if self.infinite_ammo:
-            self.player.ammo = self.ammo = [999, 999, 999]
+            self.player.ammo = self.ammo = [8, 30, 10]
 
         # Reset player movement flag at the start of update
         self.player.is_moving = False 
@@ -118,6 +118,7 @@ class Neurotrace:
         # Portal interaction
         if pyxel.btnp(pyxel.KEY_Z):
             self.check_portal_interaction()
+            self.player.level += 1
 
         # Check door proximity: if player approaches the portal, the door open. 
         self.check_door_proximity()
@@ -235,6 +236,7 @@ class Neurotrace:
                 pyxel.text(5, 45, f"Infinite Ammo: {"Yes" if self.infinite_ammo else "No"}", 11)
             
     def line_intersects_rect(self, x0, y0, x1, y1, rx, ry, rw, rh):
+        """This function checks collision"""
         # Simple AABB vs line segment check
         # Check if either endpoint is inside the rect
         if rx <= x0 <= rx+rw and ry <= y0 <= ry+rh:
@@ -242,6 +244,8 @@ class Neurotrace:
         if rx <= x1 <= rx+rw and ry <= y1 <= ry+rh:
             return True
         # Check for intersection with each edge
+        ## [CODE referemce from Online]
+        ## "line segment intersection" algorithm using the "counter-clockwise (CCW) test" from computational geometry from internet
         def ccw(A, B, C):
             return (C[1]-A[1]) * (B[0]-A[0]) > (B[1]-A[1]) * (C[0]-A[0])
         def intersect(A,B,C,D):

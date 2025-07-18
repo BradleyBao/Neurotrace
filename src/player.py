@@ -3,50 +3,77 @@ import math
 
 class Player:
     def __init__(self):
+        # import structure 
         self.structure = src.structure.STRUCTURE
+
+        # player position 
         self.x = 0
         self.y = 0
+
+        # map level 
         self.level = 0
+
+        # player speed 
         self.speed = src.settings.PLAYER_SPEED
+
+        # jump and gravity acceleration and velocity 
         self.jump_speed = src.settings.PLAYER_JUMP_SPEED
         self.gravity = src.settings.GRAVITY
         self.velocity_y = 0
         self.is_jumping = False
+
+        # player walking animation 
         self.animation_frame = 0
-        self.animation_timer = 0
-        self.facing_direction = 1  # 1 for right, -1 for left
+        self.animation_timer = 0 
+
+        # player facing direction, determine by mouse 
+        self.facing_direction = 1  # 1 for right, -1 for left 
+
+        # is moving for animation 
         self.is_moving = False
+
+        # player sprites 
         self.playerLeft = (16, 0)
         self.playerRight = (32, 0)
+
         # Dash system
-        self.is_dashing = False
+        self.is_dashing = False 
+
+        ## Dash distance 
         self.dash_distance = 32  # pixels
         self.dash_speed = 6
         self.dash_cooldown = 0
         self.dash_cooldown_max = 20  # frames
         self.dash_remaining = 0
         self.dash_direction = 1  # 1 for right, -1 for left
+        
         # Weapon system
         self.weapons = [
             {'name': 'Pistol', 'color': 0, 'penetrate': False, 'max_ammo': 8},
             {'name': 'Rifle', 'color': 12, 'penetrate': True, 'burst_count': 3, 'burst_delay': 3, 'max_ammo': 30},
             {'name': 'Sniper', 'color': 8, 'penetrate': True, 'max_ammo': 10},
         ]
+
+        ## Weapon index 
         self.current_weapon = 0
         self.bullets = []  # List of bullets: {'x', 'y', 'vx', 'vy', 'color', 'penetrate', 'alive'}
         self.weapon_offset = 5  # 1/3 of 16px
-        # Ammo system
+        
+        ## Ammo system
         self.ammo = [8, 30, 10]  # Current ammo for each weapon
-        # Reload system
+        
+        ## Reload system
         self.reload_cooldown = 0
         self.reload_cooldown_max = 120  # 2 seconds at 60fps
         self.is_reloading = False
-        # Burst fire system
+        
+        ## Burst fire system
         self.burst_firing = False
         self.burst_timer = 0
         self.burst_count = 0
         self.burst_delay = 0
-        # 8 directions: [L, R, R45U, L45U, L45D, R45D, D, U]
+        # 8 directions: 
+        # [L, R, R45U, L45U, L45D, R45D, D, U]
         self.weapon_sprites = [
             (0, 128),   # Left
             (8, 128),   # Right
@@ -67,9 +94,12 @@ class Player:
             (48, 136),  # Down
             (56, 136),  # Up
         ]
+
+        ## global weapon sprite size
         self.weapon_w = 8
         self.weapon_h = 8
-        # Firing logic
+
+        # Firing 
         self.is_firing = False
         self.fire_timer = 0
         self.fire_duration = 6  # frames (about 100ms at 60fps)
@@ -77,77 +107,121 @@ class Player:
         self.fire_line = None  # (x0, y0, x1, y1)
         # Load animation frames
         self.loadAnimation()
+
+        # Character Health
         self.health = 400
         self.max_health = 400
+
+        # Determine whether the character is still alive 
         self.alive = True
+
+        # Detemrine whether the character is using the shield
         self.is_shielding = False
         self.normal_speed = self.speed
-        self.shield_speed = 0.2  # Dramatically slower
-        self.shield_stamina = 600  # 10 seconds at 60fps
+        self.shield_speed = 0.2  # Slower speed when using shield
+        self.shield_stamina = 600  # shield remaining energy 
         self.shield_stamina_max = 600
-        self.shield_cooldown = 0  # frames
+        self.shield_cooldown = 0  # shield cooldown (frames)
         self.shield_cooldown_max = 600  # 10 seconds
+
+        # EMF debuf from boss ememy 
         self.emp_debuff_timer = 0
+
         # Med kit system
         self.medkits = 10
         self.medkit_heal = 50
         self.medkit_feedback_timer = 0
 
     def loadAnimation(self):
+        """load animation using sprite location"""
         self.walk_left = [(48, 0), (64, 0)]
         self.walk_right = [(80, 0), (96, 0)]
         self.stand_frame_left = self.playerLeft
         self.stand_frame_right = self.playerRight
 
     def moveLeft(self):
+        """move character to the left"""
+        # if not dashing 
         if not self.is_dashing:
+            # move position of character depend on the speed
             if self.is_shielding:
+                ## if char is shielding 
                 self.x -= self.shield_speed
             else:
                 self.x -= self.speed
+        # character is moving 
         self.is_moving = True
+        # dash direction would follow moving direction (not mouse)
         self.dash_direction = -1
 
     def moveRight(self):
+        """move character to the right"""
         if not self.is_dashing:
+            # move position of character depend on the speed
             if self.is_shielding:
+                ## if char is shielding 
                 self.x += self.shield_speed
             else:
                 self.x += self.speed
+        # character is moving 
         self.is_moving = True
+        # dash direction would follow moving direction (not mouse)
         self.dash_direction = 1
 
     def jump(self):
+        """player jump"""
+        # you cannot jump while you are in jumping status
         if not self.is_jumping:
+            # add velocity to go up
             self.velocity_y = self.jump_speed
+            # now the char is jumping 
             self.is_jumping = True
 
     def dash(self):
+        """player dash"""
+        # if not in dashing or in cooldown 
         if not self.is_dashing and self.dash_cooldown == 0:
+            # now the char is dashing 
             self.is_dashing = True
+            # dash_remaining and dash_cooldown is the total distance, which would decrease using frame
             self.dash_remaining = self.dash_distance
             self.dash_cooldown = self.dash_cooldown_max
 
+    # MAIN FIRING LOGIC 
     def fire(self, camera_x=0):
+        """Main Player Firing logic"""
+        # if get emp, do not allow player fire
         if self.emp_debuff_timer > 0:
-            return  # Block firing during EMP debuff
+            return 
+        # if not currently firing 
         if not self.is_firing and not self.burst_firing:
-            # Check if we have ammo
+            # Conditions that player cannot fire 
+            # Check if player have ammo
             if self.ammo[self.current_weapon] <= 0:
                 return  # No ammo, can't fire
             # Check if reloading
             if self.is_reloading:
                 return  # Can't fire while reloading
             
+            # set the fire lock 
             self.is_firing = True
+            # fire duration CD timer added and will be decreamented as frames go
             self.fire_timer = self.fire_duration
+
+            # get player absolute coordinates (need to minus camera due to dead zone), +8 to focus on the center
+            # TODO: Maybe I should add offsets for shooting? if I have time
             player_screen_x = self.x - camera_x + 8
             player_screen_y = self.y + 8
+            ## get mouse coordinates 
             mx = pyxel.mouse_x
             my = pyxel.mouse_y
+            # get angle between player and mouse 
+            ## tangent to get diagonal line
             angle = math.atan2(my - player_screen_y, mx - player_screen_x)
+            # get user current weapon 
             weapon = self.weapons[self.current_weapon]
-            # Update weapon sprites for visual model
+            # Update weapon sprites for visual model: NEED TO FIX: switch should be before firing not after
+            ## define weapon sprites 
             if weapon['name'] == 'Pistol':
                 self.weapon_sprites = [
                     (0, 128), (8, 128), (0, 136), (8, 136), (16, 128), (24, 128), (16, 136), (24, 136)
@@ -172,13 +246,15 @@ class Player:
             
             # Handle different weapon types
             if weapon['name'] == 'Sniper':
+                ## If snipers, shooting the laser
                 self.fire_angle = angle
                 self.fire_line = self.calculate_fire_line(angle, camera_x)
-            elif weapon['name'] == 'Rifle':
+            elif weapon['name'] == 'Rifle': 
                 # Start burst fire
                 self.burst_firing = True
-                self.burst_count = weapon['burst_count']
-                self.burst_delay = weapon['burst_delay']
+                ## Set Burst Fire Count 
+                self.burst_count = weapon['burst_count'] 
+                self.burst_delay = weapon['burst_delay'] 
                 self.fire_bullet(angle, weapon, camera_x)
             else:
                 # Pistol - single shot
@@ -189,7 +265,14 @@ class Player:
         # Consume ammo
         self.ammo[self.current_weapon] -= 1
         
+        # Rifle has a higher shooting speed then other two 
         speed = 8 if weapon['name'] == 'Rifle' else 5
+
+        # Lower the speed of sniper (TBD)
+        # speed = 3 if weapon['name'] == "Sniper" else 5
+
+        # Use the sin and cos to get x and y and calculate the speed of x and y
+        ## the structure contains: position, velocity of x and y, color of bullets (rifal: blue; pistal: black), rifal is penetratable 
         bullet = {'x': self.x + 8 + math.cos(angle) * 2,
                   'y': self.y + 8 + math.sin(angle) * 2,
                   'vx': math.cos(angle) * speed,
@@ -198,97 +281,133 @@ class Player:
                   'penetrate': weapon['penetrate'],
                   'alive': True,
                   'damage': 1 if weapon['name']=='Pistol' else 2}
+        ## rifal can penetrate two enemies 
         if weapon['name'] == 'Rifle':
             bullet['penetrate_count'] = 2
+
+        ## store the bullets into all bullets 
         self.bullets.append(bullet)
 
     def reload_weapon(self):
-        """Start reloading the current weapon"""
+        """reload the current weapon"""
         if not self.is_reloading and self.reload_cooldown == 0:
+            # reload lock 
             self.is_reloading = True
             self.reload_cooldown = self.reload_cooldown_max
 
     def apply_emp_debuff(self, duration):
+        """apply emp debuff: temp disable weapon"""
         self.emp_debuff_timer = duration
 
+    # === MAIN PLAYER FUNCTION ===
+    # MAIN PLAYER UPDATE
     def update(self, level=0, camera_x=0, enemies=None):
         # If dead, disable all actions and set game status to Game Over
         if not self.alive:
             self.is_moving = False
             
             return
+
         # Mouse-based facing
+        ## get player center absolute position
         player_cx = self.x + 8
         player_cy = self.y + 8
+        ## get mouse coordinate
         mouse_x = pyxel.mouse_x + camera_x
         mouse_y = pyxel.mouse_y
+
+        ## get distance between mouse x and player position
         dx = mouse_x - player_cx
-        # Facing is right if mouse is to the right, else left
+        ## Facing is right if mouse is to the right, else left
         self.facing_direction = 1 if dx >= 0 else -1
+
         # Dash logic
         if self.is_dashing:
+            # print(self.dash_remaining)
+            ## calculate the step that dash, if smaller than dash remaining distance, dash the rest 
             dash_step = min(self.dash_speed, self.dash_remaining)
             self.x += dash_step * self.dash_direction
+            ## decrement to the remaining dash distance
             self.dash_remaining -= dash_step
+            ## stop dashing if remaining distance is zero, negative added for safety check
             if self.dash_remaining <= 0:
                 self.is_dashing = False
+        ## in dash cd
         elif self.dash_cooldown > 0:
             self.dash_cooldown -= 1
-        # EMP debuff logic
+        # in emp debuff cd 
         if self.emp_debuff_timer > 0:
             self.emp_debuff_timer -= 1
-        # Weapon switching
+        # WEAPON swtich function 
+        ## weapon cannot be switched if emped
         if self.emp_debuff_timer == 0:
+            ## Q switch to left
             if pyxel.btnp(pyxel.KEY_Q):
                 self.current_weapon = (self.current_weapon - 1) % len(self.weapons)
+            ## E switch to right 
             if pyxel.btnp(pyxel.KEY_E):
                 self.current_weapon = (self.current_weapon + 1) % len(self.weapons)
-        # Reload weapon
+        # Reload weapon (cannot reload in emp effect)
         if self.emp_debuff_timer == 0 and pyxel.btnp(pyxel.KEY_R):
             self.reload_weapon()
         
-        # Reload cooldown logic
+        # in reload cd
         if self.is_reloading:
             self.reload_cooldown -= 1
+            ## if reload finished, safe check 
             if self.reload_cooldown <= 0:
-                # Finish reload
+                ## Finish reload
                 weapon = self.weapons[self.current_weapon]
+                ## reassign the ammo with max
                 self.ammo[self.current_weapon] = weapon['max_ammo']
+                ## unlock reloading lock
                 self.is_reloading = False
-        # Firing logic
+        # in firing 
         if self.is_firing:
+            ## fire cd 
             self.fire_timer -= 1
+            ## finished firing 
             if self.fire_timer <= 0:
+                ## unlock fire lock
                 self.is_firing = False
                 self.fire_line = None
         
-        # Burst fire logic
+        # in burst fire, when firing, fire function called  
         if self.burst_firing:
             self.burst_delay -= 1
+            ## finished burst fire 
             if self.burst_delay <= 0:
                 weapon = self.weapons[self.current_weapon]
+                ## weapon check: has to be rifle and stil in burst firing 
                 if weapon['name'] == 'Rifle' and self.burst_count > 1:
-                    # Fire next bullet in burst
+                    ## Fire next bullet in burst
+                    ### recalculate init position of bullets 
                     player_screen_x = self.x - camera_x + 8
                     player_screen_y = self.y + 8
                     mx = pyxel.mouse_x
                     my = pyxel.mouse_y
+                    ### calculate angle and fire
                     angle = math.atan2(my - player_screen_y, mx - player_screen_x)
                     self.fire_bullet(angle, weapon, camera_x)
+                    ## remaining bullets decrement 
                     self.burst_count -= 1
                     self.burst_delay = weapon['burst_delay']
                 else:
                     # End burst
+                    ## unlock burst fire lock
                     self.burst_firing = False
                     self.burst_count = 0
-        # Update bullets
+        # UPDATE bullets
         for bullet in self.bullets:
+            ## check if bullets are alive, if not do not render
             if not bullet['alive']:
                 continue
+            ## update linear position
             bullet['x'] += bullet['vx']
             bullet['y'] += bullet['vy']
-            # Remove if out of bounds
+            # Remove if out of bounds: x is 2560 and y is 128 (has to be full map because rendering in absolute) 
             if bullet['x'] < 0 or bullet['x'] > 2560 or bullet['y'] < 0 or bullet['y'] > 128:
+                ## if out of bounds, remove it
                 bullet['alive'] = False
             # Bullet collision with map floors
             for floor in self.structure[level]['mapFloor']:
@@ -303,50 +422,76 @@ class Player:
             # Bullet collision with enemies
             if enemies:
                 for enemy in enemies:
+                    ## ignore dead enemies 
                     if not enemy.alive:
                         continue
+                    ## collsion check, enemies are 16*16
                     if (enemy.x < bullet['x'] < enemy.x+16 and enemy.y < bullet['y'] < enemy.y+16):
+                        ## target enemy take damage
                         enemy.take_damage(bullet.get('damage', 1))
+                        ## peneration check, if enable, decrement
                         if bullet.get('penetrate_count') is not None:
                             bullet['penetrate_count'] -= 1
+                            ## if no more penetration, elimnate 
                             if bullet['penetrate_count'] <= 0:
                                 bullet['alive'] = False
+                        ## bullets with no penetration 
                         elif not bullet['penetrate']:
                             bullet['alive'] = False
+
+        # refresh bullets, leaving only live bullets 
         self.bullets = [b for b in self.bullets if b['alive']]
-        # Sniper line damage
-        if self.weapons[self.current_weapon]['name'] == 'Sniper' and self.is_firing and self.fire_line and enemies:
+
+        # Sniper line damage - special weapon 
+        ## fire only if weapon is sniper and enemy and firing, only calcualte for several frames 
+        if self.weapons[self.current_weapon]['name'] == 'Sniper' and self.is_firing and self.fire_line and enemies: 
+            ## get current live fire line position 
             x0, y0, x1, y1 = self.fire_line
+
+            ## check collision with enemies 
             for enemy in enemies:
                 if not enemy.alive:
                     continue
                 ex, ey = enemy.x, enemy.y
                 if self.line_intersects_rect(x0, y0, x1, y1, ex, ey, 16, 16):
                     enemy.take_damage(5)
+
         # Apply gravity
+        ## simple simulated calculation, every time is two times the acceleration 
         self.velocity_y += self.gravity
         self.y += self.velocity_y
+
         # Clamp player x position to map walls
         map_walls = self.structure[level]["mapWall"]
+
+        ## map walls should have two, safe check
         if len(map_walls) >= 2:
             left_wall = map_walls[0]
             right_wall = map_walls[1]
             min_x = left_wall[0] + left_wall[2]  # right edge of left wall
             max_x = right_wall[0] - 16           # left edge of right wall minus player width
+
+            ## if player positon is surpassing the wall, make them equal (stop them from moving towards the wall)
             if self.x < min_x:
                 self.x = min_x
             if self.x > max_x:
                 self.x = max_x
-        # Optionally clamp y to not fall below the map
+
+        # even though the floor collision is checking, for safety, mandeteory adding height limit to prevent player from falling 
         map_height = self.structure[level]["mapWH"][1]
         if self.y > map_height:
             self.y = map_height
             self.velocity_y = 0
+
         # Check floor collision
         self.checkFloorCollision(level)
-        # Update animation - continue animation while moving
+
+        # Update animation
+        ## animation while moving
         if self.is_moving:
+            ### set animation index 
             self.animation_timer += 1
+            ### if index reached the end of array, reset
             if self.animation_timer >= src.settings.ANIMATION_SPEED:  # Animation speed
                 self.animation_frame = (self.animation_frame + 1) % 2
                 self.animation_timer = 0
@@ -354,51 +499,81 @@ class Player:
             # Reset animation when not moving
             self.animation_frame = 0
             self.animation_timer = 0
-        # Shield stamina and cooldown logic
+
+        # Shield Logic 
+        ## if not emped 
         if self.emp_debuff_timer == 0:
+            ### if player hold shift and stamina is still alive and not in cd 
             if pyxel.btn(pyxel.KEY_SHIFT) and self.shield_stamina > 0 and self.shield_cooldown == 0:
+                #### set shield lock 
                 self.is_shielding = True
+                #### set to shield speed 
                 self.speed = self.shield_speed
+                #### consume energy 
                 self.shield_stamina -= 1
+
+                #### if no energy, reset 
                 if self.shield_stamina <= 0:
                     self.shield_stamina = 0
+                    ##### unlock shield lock 
                     self.is_shielding = False
+                    ##### add shield cd (overheating penalty)
                     self.shield_cooldown = self.shield_cooldown_max
+                    ##### switch back the speed 
                     self.speed = self.normal_speed
+            ### if not able to engage shield, reset to normal status 
             else:
                 if self.is_shielding:
                     self.speed = self.normal_speed
                 self.is_shielding = False
+                #### in cd, decrement 
                 if self.shield_cooldown > 0:
                     self.shield_cooldown -= 1
                 elif self.shield_stamina < self.shield_stamina_max:
                     self.shield_stamina += 1
+        ### if emped, forced to cancel the shield
         else:
             self.is_shielding = False
             self.speed = self.normal_speed
-        # Med kit use (press X)
+        
+        # Med kit use (press X), not able to use when emped 
         if self.emp_debuff_timer == 0 and pyxel.btnp(pyxel.KEY_X):
+            ## having avilable meds and not able to use it in full health 
             if self.medkits > 0 and self.health < self.max_health:
                 self.medkits -= 1
+                ### preventing surpass max health 
                 self.health = min(self.max_health, self.health + self.medkit_heal)
+                ### show med info for .5s 
                 self.medkit_feedback_timer = 30  # Show feedback for 0.5s
-        # Med kit feedback timer
+        # Med kit feedback timer for drawing 
         if self.medkit_feedback_timer > 0:
             self.medkit_feedback_timer -= 1
 
     def calculate_fire_line(self, angle, camera_x=0):
+        """
+        helper function for sniping fireline
+        :return the coordinate of init x init y end x end y of fire line of snipers 
+        """
         # Start at gun muzzle
+        ## calculate player center (cricle)
         player_cx = self.x + 8
         player_cy = self.y + 8
+        ## calculate muzzle based on player's absolute coordinate
         muzzle_x = int(player_cx + math.cos(angle) * 8)
         muzzle_y = int(player_cy + math.sin(angle) * 8)
         # Step along the line until hit floor or map edge
-        max_length = 2560  # Use map width instead of screen size
+        max_length = 256  # only for two chunkcs to increase difficulty 
+
+        # check every two pixels (opt: it would be so inefficient to use 1)
         step = 2
+        # check all lines pixels for collision for rendering 
         for l in range(0, max_length, step):
+            ## get current frame's line's coordinate 
             tx = int(muzzle_x + math.cos(angle) * l)
             ty = int(muzzle_y + math.sin(angle) * l)
             # Check map bounds (world coordinates)
+            ## ! the bound is absolute, has to be full bound
+            ## if outside the bound
             if tx < 0 or tx >= 2560 or ty < 0 or ty >= 128:
                 return (muzzle_x, muzzle_y, tx, ty)
             # Check collision with floors
@@ -412,9 +587,13 @@ class Player:
         return (muzzle_x, muzzle_y, tx, ty)
 
     def checkFloorCollision(self, level):
+        """helper function to check if player collide with the floor"""
         floors = self.structure[level]["mapFloor"]
         # Check if player is on any floor
+        ## on floor lock
         on_floor = False
+
+        ## check all floors 
         for i, floor in enumerate(floors):
             floor_x, floor_y, floor_w, floor_h = floor
             # Check if player is above the floor and falling
@@ -422,9 +601,11 @@ class Player:
                 self.x + 16 > floor_x and 
                 self.y + 16 >= floor_y and 
                 self.y + 16 <= floor_y + floor_h + 5):  # Added tolerance for landing
-                # Land on floor
+                # Land on floor, calculate in 16*16 
                 self.y = floor_y - 16
+                ## set character not to fall 
                 self.velocity_y = 0
+                ## reset jumping lock, enable jumping 
                 self.is_jumping = False
                 on_floor = True
                 break
@@ -433,6 +614,7 @@ class Player:
             self.is_jumping = True
 
     def resetPlayerPos(self, level=0):
+        """helper function to reset player status and position, will reset every level"""
         self.x = self.structure[level]["playerInitPos"][0]
         self.y = self.structure[level]["playerInitPos"][1]
         self.velocity_y = 0
@@ -444,11 +626,15 @@ class Player:
         self.dash_remaining = 0
 
     def get_weapon_direction_index(self, camera_x=0):
+        """helper function to determine which direction is pointing for sprites rendering"""
         # 8 directions: [L, R, R45U, L45U, L45D, R45D, D, U]
+        ## get player positon in center
         player_screen_x = self.x - camera_x + 8
         player_screen_y = self.y + 8
+        ## get mouse position [relative]
         mx = pyxel.mouse_x
         my = pyxel.mouse_y
+        ## calculate angle that pointing towards cursor
         angle = math.degrees(math.atan2(my - player_screen_y, mx - player_screen_x))
         if angle < 0:
             angle += 360
@@ -472,25 +658,41 @@ class Player:
             return 1  # Default to Right
 
     def draw_weapon(self, x_offset=0, camera_x=0):
+        """helper function to draw weapon"""
+        # get center player position 
         player_screen_x = self.x - x_offset + 8
         player_screen_y = self.y + 8
+        # get mouse position [relative]
         mx = pyxel.mouse_x
         my = pyxel.mouse_y
+        # calculate angle towards mouse
         angle = math.atan2(my - player_screen_y, mx - player_screen_x)
+        # calculate in degree not radian 
         angle_deg = math.degrees(angle)
+        # get weapon direction index 
         idx = self.get_weapon_direction_index_from_angle(angle_deg)
+        # in fire, switch to corresponding firing sprites 
         if self.is_firing or self.burst_firing:
             sx, sy = self.weapon_fire_sprites[idx]
+        # if not, switch to normal firing sprites 
         else:
             sx, sy = self.weapon_sprites[idx]
+        # screen coordinates where the weapon sprite should be drawn using relative player coordinates 
+        # (sprite of weapon is 8*8 and rendered in the center of weapon's width)
         wx = int(player_screen_x + math.cos(angle) * 8 - self.weapon_w // 2)
         wy = int(player_screen_y + math.sin(angle) * 8 - self.weapon_h // 2)
+        # main weapon rendering function 
         pyxel.blt(wx, wy, 0, sx, sy, self.weapon_w, self.weapon_h, 14)
+        # draw the fire line
         if self.is_firing and self.fire_line:
             x0, y0, x1, y1 = self.fire_line
             pyxel.line(x0 - x_offset, y0, x1 - x_offset, y1, 8)
 
     def get_weapon_direction_index_from_angle(self, angle):
+        """
+        helper function to get weapon direction sprite
+        :return integer that stands for which angle to render 
+        """
         if angle < 0:
             angle += 360
         if 157.5 <= angle < 202.5:
@@ -512,14 +714,17 @@ class Player:
         else:
             return 1  # Default to Right
 
+    # MAIN PLAYER DRAWING FUNCTION
     def draw(self, x_offset=0, camera_x=0, level=0):
         # Draw player death sprite if dead
         if not self.alive:
+            ## minus offset for deadzone 
             if self.facing_direction == 1:  # Right
                 pyxel.blt(self.x - x_offset, self.y, 0, 160, 0, 16, 16, 14)
             else:  # Left
                 pyxel.blt(self.x - x_offset, self.y, 0, 144, 0, 16, 16, 14)
-            # Optionally, draw health bar and text as zero
+            # Draw health bar and text as zero
+            ## minus offset for deadzone 
             bar_x = self.x - x_offset
             bar_y = self.y - 8
             bar_w = 16
@@ -527,9 +732,10 @@ class Player:
             pyxel.rect(bar_x, bar_y, 0, bar_h, 8)
             pyxel.text(5, 2, f"HP: 0/{self.max_health}", 7)
             return
+
         # Draw player sprite
         if self.is_moving:
-            # Draw walking animation
+            # Draw walking animation via index
             if self.facing_direction == 1:  # Right
                 frame = self.walk_right[self.animation_frame]
             else:  # Left
@@ -541,19 +747,23 @@ class Player:
                 pyxel.blt(self.x - x_offset, self.y, 0, self.stand_frame_right[0], self.stand_frame_right[1], 16, 16, 14)
             else:  # Left
                 pyxel.blt(self.x - x_offset, self.y, 0, self.stand_frame_left[0], self.stand_frame_left[1], 16, 16, 14)
+        
         # Draw shield overlay if shielding
         if self.is_shielding:
             if self.facing_direction == 1:  # Right
                 pyxel.blt(self.x - x_offset + 4, self.y, 0, 32, 144, 16, 16, 14)
             else:  # Left
                 pyxel.blt(self.x - x_offset - 4, self.y, 0, 48, 144, 16, 16, 14)
+        
         # Draw weapon after player
         self.draw_weapon(x_offset, camera_x)
+
         # Draw health bar above player (red)
         bar_x = self.x - x_offset
         bar_y = self.y - 8
         bar_w = 16
         bar_h = 2
+        ## calculate health ratio 
         health_ratio = self.health / self.max_health
         pyxel.rect(bar_x, bar_y, int(bar_w * health_ratio), bar_h, 8)
         # Draw player health text
@@ -561,7 +771,6 @@ class Player:
         # Draw ammo text
         weapon = self.weapons[self.current_weapon]
         ammo_color = 7 if self.ammo[self.current_weapon] > 0 else 8  # White if has ammo, red if empty
-        
         
         # Draw weapons 
         if self.weapons[self.current_weapon]['name'] == 'Sniper':
@@ -581,8 +790,6 @@ class Player:
             icon_y = pyxel.height - 12
             pyxel.blt(icon_x, icon_y, 0, pistal_sprite[0], pistal_sprite[1], 8, 8, 14)
 
-        
-
         # Draw reload progress if reloading
         if self.is_reloading:
             reload_progress = 1.0 - (self.reload_cooldown / self.reload_cooldown_max)
@@ -594,12 +801,14 @@ class Player:
             pyxel.rect(bar_x, bar_y, int(bar_width * reload_progress), bar_height, 10)  # Progress
             # pyxel.text(bar_x, bar_y - 8, "RELOADING", 10)
         else:
+            # if not reloading, show the remaining ammo 
             # pyxel.text(12, pyxel.height - 4, f"{self.ammo[self.current_weapon]}/{weapon['max_ammo']}", ammo_color)
             pyxel.text(12, pyxel.height - 4, f"{self.ammo[self.current_weapon]}", ammo_color)
         
-        # Draw portal interaction hint if near portal
-        if "portal" in self.structure[level]:
-            portal_x, portal_y, portal_w, portal_h = self.structure[level]["portal"]
+        # Draw portal interaction hint if near portal (ONLY FOR FIRST LEVEL, deprecated due to not functioning)
+        if "portal" in self.structure[self.level]:
+            portal_x, portal_y, portal_w, portal_h = self.structure[self.level]["portal"]
+            # print(portal_x, portal_y, portal_w, portal_h)
             # Use player center coordinates to match portal interaction logic
             player_center_x = self.x + 8
             player_center_y = self.y + 8
@@ -642,6 +851,7 @@ class Player:
 
     @staticmethod
     def line_intersects_rect(x0, y0, x1, y1, rx, ry, rw, rh):
+        """help function that do collision check"""
         # Simple AABB vs line segment check
         if rx <= x0 <= rx+rw and ry <= y0 <= ry+rh:
             return True
@@ -663,9 +873,12 @@ class Player:
         return False
 
     def take_damage(self, amount):
+        """helper function that take damage"""
+        # shielding would still cause damage (maybe too hard I should just not taking damage)
         if self.is_shielding:
             amount = (amount + 1) // 2  # Halve and round up
         self.health -= amount
+        ## player is dead 
         if self.health <= 0:
             self.health = 0
             self.alive = False
