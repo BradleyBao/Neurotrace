@@ -64,6 +64,9 @@ class Neurotrace:
         if pyxel.btnp(pyxel.KEY_F3):
             self.debug_mode = not self.debug_mode
 
+        if self.debug_mode:
+            self.player.speed = 10
+
         # Toggle god_mode with F4 Key 
         if pyxel.btnp(pyxel.KEY_F4):
             self.god_mode = not self.god_mode
@@ -118,7 +121,7 @@ class Neurotrace:
         # Portal interaction
         if pyxel.btnp(pyxel.KEY_Z):
             self.check_portal_interaction()
-            self.player.level += 1
+            
 
         # Check door proximity: if player approaches the portal, the door open. 
         self.check_door_proximity()
@@ -190,6 +193,9 @@ class Neurotrace:
         """Transition to the next level"""
         # increment to game level 
         self.level += 1
+        self.player.level += 1
+        # print("Function called")
+        # self.player.level += 1
         # if the level is in the map 
         if self.level in self.map.structure:
             ## Clear current enemies

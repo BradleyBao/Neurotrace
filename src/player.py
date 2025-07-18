@@ -554,6 +554,7 @@ class Player:
         helper function for sniping fireline
         :return the coordinate of init x init y end x end y of fire line of snipers 
         """
+        # print(self.level)
         # Start at gun muzzle
         ## calculate player center (cricle)
         player_cx = self.x + 8
@@ -806,7 +807,8 @@ class Player:
             pyxel.text(12, pyxel.height - 4, f"{self.ammo[self.current_weapon]}", ammo_color)
         
         # Draw portal interaction hint if near portal (ONLY FOR FIRST LEVEL, deprecated due to not functioning)
-        if "portal" in self.structure[self.level]:
+        # check if the level exist first 
+        if self.level < len(self.structure) and "portal" in self.structure[self.level]:
             portal_x, portal_y, portal_w, portal_h = self.structure[self.level]["portal"]
             # print(portal_x, portal_y, portal_w, portal_h)
             # Use player center coordinates to match portal interaction logic
