@@ -69,7 +69,7 @@ class Neurotrace:
         self.god_mode = False
         self.infinite_ammo = False
         self.door_open = False
-        self.debug_mode = True
+        # self.debug_mode = False
 
     def update(self):
         ## get camera offset 
