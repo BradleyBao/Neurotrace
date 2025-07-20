@@ -1,4 +1,5 @@
 # Neurotrace
+**This project is for Fundamental of Information Technology 2 in Keio SFC.**
 
 A 2D platformer game built with Pyxel featuring a smooth camera system that follows the player.
 
