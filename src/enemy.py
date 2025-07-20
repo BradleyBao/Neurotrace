@@ -953,7 +953,7 @@ class HumanEnemy4(BaseEnemy):
 class BossEnemy(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(8, x, y, level)
-        self.hp = 1000
+        self.hp = 700
         self.weapon = 'Rifle'
         self.weapon_sprites = [
             (0, 160), (8, 160), (0, 168), (8, 168), (16, 160), (24, 160), (16, 168), (24, 168)
@@ -1277,7 +1277,7 @@ class BossEnemy(BaseEnemy):
             bar_h = 5
             bar_x = self.x - x_offset + 8 - bar_w // 2
             bar_y = self.y - 18
-            pct = max(0, self.hp / 1000)
+            pct = max(0, self.hp / 700)
             pyxel.rect(bar_x, bar_y, bar_w, bar_h, 1)
             pyxel.rect(bar_x, bar_y, int(bar_w * pct), bar_h, 8)
             percent_text = f"BOSS {int(pct*100)}%"

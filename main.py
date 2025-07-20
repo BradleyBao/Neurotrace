@@ -7,7 +7,7 @@ class Neurotrace:
     # === INIT AREA ===
 
     def __init__(self):
-        self.debug_mode = True  # Debug mode flag
+        self.debug_mode = False  # Debug mode flag
         self.god_mode = False   # god mode 
         self.infinite_ammo = False  # infinite ammo 
         self.door_open = False  # Door state
