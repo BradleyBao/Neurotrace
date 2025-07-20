@@ -134,6 +134,12 @@ class Player:
         self.medkit_heal = 50
         self.medkit_feedback_timer = 0
 
+        # Damage sprite state
+        self.visual_state = "normal"  # normal, damage
+        self.visual_state_timer = 0
+        self.sprite_damage_left = (176, 0)
+        self.sprite_damage_right = (192, 0)
+
     def loadAnimation(self):
         """load animation using sprite location"""
         self.walk_left = [(48, 0), (64, 0)]
@@ -554,6 +560,12 @@ class Player:
         if self.medkit_feedback_timer > 0:
             self.medkit_feedback_timer -= 1
 
+        # Update damage sprite timer
+        if self.visual_state == "damage":
+            self.visual_state_timer -= 1
+            if self.visual_state_timer <= 0 and self.health > 0:
+                self.visual_state = "normal"
+
     def calculate_fire_line(self, angle, camera_x=0):
         """
         helper function for sniping fireline
@@ -740,7 +752,13 @@ class Player:
             return
 
         # Draw player sprite
-        if self.is_moving:
+        if self.visual_state == "damage":
+            # Draw damage sprite
+            if self.facing_direction == 1:
+                pyxel.blt(self.x - x_offset, self.y, 0, self.sprite_damage_right[0], self.sprite_damage_right[1], 16, 16, 14)
+            else:
+                pyxel.blt(self.x - x_offset, self.y, 0, self.sprite_damage_left[0], self.sprite_damage_left[1], 16, 16, 14)
+        elif self.is_moving:
             # Draw walking animation via index
             if self.facing_direction == 1:  # Right
                 frame = self.walk_right[self.animation_frame]
@@ -889,6 +907,9 @@ class Player:
         if self.is_shielding:
             amount = (amount + 1) // 2  # Halve and round up
         self.health -= amount
+        # Switch to damage sprite
+        self.visual_state = "damage"
+        self.visual_state_timer = 10  # Show damage sprite for 10 frames
         ## player is dead 
         if self.health <= 0:
             self.health = 0
