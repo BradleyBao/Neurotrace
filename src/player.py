@@ -126,6 +126,8 @@ class Player:
 
         # EMF debuf from boss ememy 
         self.emp_debuff_timer = 0
+        # Flashbang blind effect
+        self.flashbang_blind_timer = 0
 
         # Med kit system
         self.medkits = 10
@@ -338,6 +340,9 @@ class Player:
         # in emp debuff cd 
         if self.emp_debuff_timer > 0:
             self.emp_debuff_timer -= 1
+        # Flashbang blind effect timer
+        if self.flashbang_blind_timer > 0:
+            self.flashbang_blind_timer -= 1
         # WEAPON swtich function 
         ## weapon cannot be switched if emped
         if self.emp_debuff_timer == 0:
@@ -851,6 +856,10 @@ class Player:
         if self.medkit_feedback_timer > 0:
             pyxel.text(self.x - x_offset, self.y - 20, f"+{self.medkit_heal} HP", 11)
 
+        # Draw flashbang blinding overlay
+        if hasattr(self, 'flashbang_blind_timer') and self.flashbang_blind_timer > 0:
+            pyxel.rect(0, 0, pyxel.width, pyxel.height, 7)
+
     @staticmethod
     def line_intersects_rect(x0, y0, x1, y1, rx, ry, rw, rh):
         """help function that do collision check"""
@@ -884,3 +893,4 @@ class Player:
         if self.health <= 0:
             self.health = 0
             self.alive = False
+            

@@ -4,8 +4,9 @@ This module provides helper functions to manage the game status in the Neurotrac
 """
 import pyxel, src.settings, PyxelUniversalFont as pul
 class GameStatus:
+    status = 0
     def __init__(self):
-        self.status = 1 # Init Game Status
+        # self.status = 0 # Init Game Status
         self.previous_status = 0    # Init Previous Game Status 
         self.initFonts()
     def is_menu(self):
@@ -43,6 +44,9 @@ class GameStatus:
         """
         return self.status == 4
 
+    def is_winning(self):
+        return self.status == 5
+
     def set_status(self, new_state):
         """
         Set the current game state to a new state.
@@ -68,15 +72,47 @@ class GameStatus:
         # Draw the menu background
         pyxel.cls(0)
         title_content = src.settings.GAME_TITLE
-        subtitle_content = "Press any key to start"
-        title_size = 45
-        subtitle_size = 15
+        subtitle_content = "Press SPACE to start"
+        title_size = 22
+        subtitle_size = 10
         title_x = 15
         title_y = src.settings.WINDOW_HEIGHT // 4
         subtitle_x = 15
-        subtitle_y = 150
+        subtitle_y = 85
         # Draw the title text in the center of the window
         self.title_writer.draw(title_x, title_y, title_content, title_size, 7)
         self.title_writer.draw(subtitle_x, subtitle_y, subtitle_content, subtitle_size, 7) 
+
+    def showGameOver(self):
+        """
+        Display the game over of the game. 
+        """
+        content = "YOU DIED"
+        subtitle_content = "Press R to restart"
+        size = 22 
+        subtitle_size = 10
+        x = 15 
+        y = src.settings.WINDOW_HEIGHT // 4
+        subtitle_x = 15
+        subtitle_y = 85
+
+        self.title_writer.draw(x, y, content, size, 8) 
+        self.title_writer.draw(subtitle_x, subtitle_y, subtitle_content, subtitle_size, 8) 
+
+    def showWinning(self):
+        """
+        Display the game over of the game. 
+        """
+        content = "YOU WIN"
+        subtitle_content = "Press R to restart"
+        size = 22 
+        subtitle_size = 10
+        x = 15 
+        y = src.settings.WINDOW_HEIGHT // 4
+        subtitle_x = 15
+        subtitle_y = 85
+
+        self.title_writer.draw(x, y, content, size, 10) 
+        self.title_writer.draw(subtitle_x, subtitle_y, subtitle_content, subtitle_size, 10) 
 
     

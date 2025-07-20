@@ -9,10 +9,10 @@ STRUCTURE = {
             # (80, 80, 48, 16),   # Platform 2
         ],
         "enemies": [
-            (4, 5*8, 95),  # type 0 at (40, 95)
-            (4, 320, 95),  # type 1 at (80, 95)
-            (4, 320, 95),  # type 1 at (80, 95)
-            (4, 320, 95),  # type 1 at (80, 95)
+            (3, 5*8, 95),  # type 0 at (40, 95)
+            (0, 320, 95),  # type 1 at (320, 95)
+            (4, 320, 95),  # type 1 at (320, 95)
+            (1, 320, 95),  # type 1 at (320, 95)
             # Add more as needed
         ],
         "mapWall": [
@@ -31,10 +31,12 @@ STRUCTURE = {
             # (400, 240, 75, 16),   # Platform 2
         ],
         "enemies": [
-            (4, 100, 112),  # type 0 at (100, 352)
-            (5, 300, 112),  # type 1 at (300, 352)
+            (2, 100, 112),  # type 0 at (100, 352)
+            (4, 300, 112),  # type 1 at (300, 352)
             (4, 450, 112),  # type 1 at (450, 352)
-            (4, 450, 112),  # type 1 at (450, 352)
+            (1, 450, 112),  # type 1 at (450, 352)
+            (3, 450, 112),  # type 1 at (450, 352)
+            (3, 450, 112),  # type 1 at (450, 352)
             (4, 450, 112),  # type 1 at (450, 352)
         ],
         "mapWall": [
@@ -55,11 +57,12 @@ STRUCTURE = {
         ],
         "enemies": [
             (4, 150, 112),  # type 0 at (150, 112)
-            (4, 350, 112),  # type 1 at (350, 112)
-            (4, 550, 112),  # type 1 at (550, 112)
-            (4, 750, 112),  # type 1 at (750, 112)
+            (6, 350, 112),  # type 1 at (350, 112)
+            (5, 550, 112),  # type 1 at (550, 112)
+            (3, 750, 112),  # type 1 at (750, 112)
             (4, 200, 80),   # type 0 on platform 1
             (4, 600, 80),   # type 1 on platform 3
+            (7, 600, 80),   # type 1 on platform 3
             (5, 600, 80),   # type 1 on platform 3
             (2, 1000, 80),   # type 2 on platform 3
         ],
@@ -83,10 +86,10 @@ STRUCTURE = {
         "enemies": [
             (4, 200, 112),   # type 0 on main floor
             (5, 400, 112),   # type 1 on main floor
-            (4, 600, 112),   # type 0 on main floor
+            (6, 600, 112),   # type 0 on main floor
             (5, 800, 112),   # type 1 on main floor
             (2, 1000, 112),  # type 2 on main floor
-            (4, 250, 80),    # type 0 on platform 1
+            (6, 250, 80),    # type 0 on platform 1
             (5, 500, 60),    # type 1 on platform 2
             (4, 750, 80),    # type 0 on platform 3
             (2, 950, 40),    # type 2 on platform 4

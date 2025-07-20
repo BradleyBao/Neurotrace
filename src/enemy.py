@@ -1,11 +1,16 @@
 import pyxel
 import src.settings
 import src.structure
+import src.game_status
 import math
 import random
 # from src.enemy import create_enemy
 
+# === Enemy Type ===
 class BaseEnemy:
+    """
+    This class is the base enemy for all enemies. 
+    """
     def __init__(self, type_index, x, y, level=0):
         self.type_index = type_index
         self.x = x
@@ -21,7 +26,7 @@ class BaseEnemy:
         self.facing_direction = 1
         self.animation_frame = 0
         self.animation_timer = 0
-        # Weapon system
+        # Weapon system and its corresponding sprites 
         self.weapon_types = [
             {
                 'name': 'Pistol',
@@ -48,6 +53,9 @@ class BaseEnemy:
                 'ai': 'sniper',
             },
         ]
+
+        # enemy random choose weapons by default 
+        ## get information from weapon data 
         weapon_choice = random.choice(self.weapon_types)
         self.weapon = weapon_choice['name']
         self.weapon_sprites = weapon_choice['sprites']
@@ -67,13 +75,16 @@ class BaseEnemy:
         self.visual_state_timer = 0
         self.state = "patrol"  # AI state: patrol, chase, attack, retreat
         self.alive = True
-        self.hp = 10  # Default, override in subclasses
+        self.hp = 10  # Default HP, override in subclasses
+        # patrol 
         self.patrol_origin = x
+        # partrol range 
         self.patrol_range = 32 + random.randint(0, 32)
+        # enemy facing direction 
         self.patrol_dir = 1 if random.random() < 0.5 else -1
         self.stand_timer = 0
         self.retreat_timer = 0
-        # Attack cooldown and miss chance
+        # Attack cooldown and miss chance 
         self.attack_cooldown = 0
         self.attack_cooldown_max = 60
         self.miss_chance = 0.2  # Default, override in subclasses
@@ -84,7 +95,7 @@ class BaseEnemy:
         self.special_active = False
         self.special_timer = 0
         self.special_duration = 60  # Default, override in subclasses
-        # Default sprite locations (can be overridden in subclasses)
+        # Default sprite locations (should be overridden in subclasses)
         self.sprite_left = (0, 0)
         self.sprite_right = (16, 0)
         self.sprite_damage_left = (32, 0)
@@ -92,17 +103,21 @@ class BaseEnemy:
         self.sprite_defeated_left = (64, 0)
         self.sprite_defeated_right = (80, 0)
         self.bullets = []  # List of bullets: {'x', 'y', 'vx', 'vy', 'color', 'penetrate', 'alive'}
-        # Grenade system
+        # Grenade system (deprecated)
         self.grenades = []  # List of grenades: {'x', 'y', 'vx', 'vy', 'timer', 'alive', 'exploded'}
 
     def take_damage(self, amount):
+        """enemy take damage"""
         if self.visual_state == "defeated":
+            # ignore if defeated 
             return
         self.hp -= amount
+        # hp lower than 0, it is defeated 
         if self.hp <= 0:
             self.visual_state = "defeated"
-            self.alive = False
+            self.alive = False 
         else:
+            # visual state (red char)
             self.visual_state = "damage"
             self.visual_state_timer = 10  # Show damage sprite for 10 frames
 
@@ -115,7 +130,7 @@ class BaseEnemy:
             self.activate_special_ability(player)
 
     def activate_special_ability(self, player):
-        """Override in subclasses to implement specific abilities"""
+        """This function should be overrided in the subclasses"""
         pass
 
     def update_special_ability(self, player):
@@ -129,15 +144,18 @@ class BaseEnemy:
             self.special_cooldown -= 1
 
     def deactivate_special_ability(self, player):
-        """Override in subclasses to clean up ability effects"""
+        """This function should be overrided in the subclasses"""
         pass
 
     def draw_special_effect(self, x_offset):
-        """Override in subclasses to draw special ability effects"""
+        """This function should be overrided in the subclasses"""
         pass
 
     def throw_grenade(self, target_x, target_y):
-        """Throw a grenade towards target position"""
+        """
+        Throw a grenade towards target position
+        This function is deprecated 
+        """
         if self.special_cooldown <= 0:
             # Calculate trajectory
             dx = target_x - self.x
@@ -444,7 +462,7 @@ class BaseEnemy:
         # Draw grenades
         for grenade in self.grenades:
             if grenade['alive']:
-                pyxel.blt(grenade['x'] - x_offset - 4, grenade['y'] - 4, 0, 0, 208, 8, 8, 0)
+                pyxel.blt(grenade['x'] - x_offset - 4, grenade['y'] - 4, 0, 0, 208, 8, 8, 14)
         
         # Draw special ability effects
         if self.special_active:
@@ -564,31 +582,74 @@ class RobotEnemy1(BaseEnemy):
         self.sprite_defeated_left = (64, 96)
         self.sprite_defeated_right = (80, 96)
         self.emp_pulse_timer = 0
+        # Laser Sweep
+        self.laser_sweep_cooldown = 0
+        self.laser_sweep_cooldown_max = 360
+        self.laser_sweep_active = False
+        self.laser_sweep_timer = 0
+        self.laser_sweep_duration = 40
+        self.laser_sweep_y = 0
+        self.laser_sweep_warning = 0
+        self.laser_sweep_warning_duration = 30
+        self.emp_debuff_duration = 60  # 1s
 
     def activate_special_ability(self, player):
-        """Activate EMP - creates an electromagnetic pulse that damages player"""
+        """Activate EMP - creates an electromagnetic pulse that damages and EMPs player"""
         self.emp_pulse_timer = 30  # Create initial pulse
+        # 50% chance to do laser sweep instead
+        if self.laser_sweep_cooldown == 0 and random.random() < 0.5:
+            self.laser_sweep_active = True
+            self.laser_sweep_timer = self.laser_sweep_duration
+            self.laser_sweep_warning = self.laser_sweep_warning_duration
+            self.laser_sweep_y = self.y + 8
+            self.laser_sweep_cooldown = self.laser_sweep_cooldown_max
 
     def update_special_ability(self, player):
-        """Update EMP effects"""
         super().update_special_ability(player)
+        # EMP Pulse
         if self.emp_pulse_timer > 0:
             self.emp_pulse_timer -= 1
             # Check if player is in EMP range
             distance = abs(player.x - self.x)
             if distance <= 48:  # EMP range
                 player.take_damage(1)  # Continuous damage during pulse
+                player.apply_emp_debuff(self.emp_debuff_duration)
+        # Laser Sweep
+        if self.laser_sweep_active:
+            if self.laser_sweep_warning > 0:
+                self.laser_sweep_warning -= 1
+            else:
+                self.laser_sweep_timer -= 1
+                # Laser is active
+                # If player is in the laser line (horizontal sweep)
+                if abs(player.y + 8 - self.laser_sweep_y) < 8 and abs(player.x - self.x) < 256:
+                    player.take_damage(4)
+                if self.laser_sweep_timer <= 0:
+                    self.laser_sweep_active = False
+
+        if self.laser_sweep_cooldown > 0:
+            self.laser_sweep_cooldown -= 1
 
     def draw_special_effect(self, x_offset):
-        """Draw EMP effect"""
         if self.special_active:
             # Draw EMP pulse
             pulse_radius = 48 - (self.special_timer // 2)
             if pulse_radius > 0:
-                # Draw expanding circle effect
                 for i in range(0, pulse_radius, 8):
                     alpha = max(0, 15 - (i // 4))
                     pyxel.circb(self.x - x_offset + 8, self.y + 8, i, alpha)
+        # Draw Laser Sweep
+        if self.laser_sweep_active:
+            px = self.x - x_offset
+            if self.laser_sweep_warning > 0:
+                # Warning: flashing line
+                color = 8 if (self.laser_sweep_warning // 4) % 2 == 0 else 7
+                pyxel.line(0, self.laser_sweep_y, 2560, self.laser_sweep_y, color)
+            else:
+                # Laser: thick red line
+                for i in range(-2, 3):
+                    pyxel.line(0, self.laser_sweep_y + i, 2560, self.laser_sweep_y + i, 8)
+                pyxel.text(self.x - x_offset, self.laser_sweep_y - 12, "LASER SWEEP", 8)
 class RobotEnemy2(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(2, x, y, level)
@@ -707,7 +768,7 @@ class HumanEnemy2(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(5, x, y, level)
         self.miss_chance = 0.3
-        self.special_ability = "Grenade"
+        self.special_ability = "Flashbang"
         self.special_cooldown_max = 360  # 6 seconds
         self.special_duration = 10  # Short duration
         self.hp = 35
@@ -717,19 +778,65 @@ class HumanEnemy2(BaseEnemy):
         self.sprite_damage_right = (48, 64)
         self.sprite_defeated_left = (64, 64)
         self.sprite_defeated_right = (80, 64)
+        # TODO Flashbang system: not really working now, need to be fixed
+        self.flashbangs = []  # List of {'x','y','vx','vy','timer','alive','exploded'}
+        self.flashbang_effect_timer = 0
 
     def activate_special_ability(self, player):
-        """Activate grenade throw"""
-        # Throw grenade at player position
-        self.throw_grenade(player.x + 8, player.y + 8)
+        """Activate flashbang throw"""
+        # Throw flashbang at player position
+        dx = player.x - self.x
+        dy = player.y - self.y
+        dist = math.sqrt(dx*dx + dy*dy)
+        if dist > 0:
+            dx /= dist
+            dy /= dist
+        speed = 2.0 + random.uniform(-0.5, 0.5)
+        vx = dx * speed
+        vy = dy * speed - 1.0
+        flashbang = {
+            'x': self.x + 8,
+            'y': self.y + 8,
+            'vx': vx,
+            'vy': vy,
+            'timer': 60,  # 1s fuse
+            'alive': True,
+            'exploded': False
+        }
+        self.flashbangs.append(flashbang)
+
+    def update_special_ability(self, player):
+        super().update_special_ability(player)
+        # Update flashbangs
+        for fb in self.flashbangs:
+            if not fb['alive']:
+                continue
+            fb['x'] += fb['vx']
+            fb['y'] += fb['vy']
+            fb['vy'] += 0.1  # Gravity
+            fb['timer'] -= 1
+            if fb['timer'] <= 0 and not fb['exploded']:
+                fb['exploded'] = True
+                fb['alive'] = False
+                # Flash effect: if player is in range
+                dx = fb['x'] - (player.x + 8)
+                dy = fb['y'] - (player.y + 8)
+                if math.sqrt(dx*dx + dy*dy) <= 40:
+                    player.apply_emp_debuff(45)  # 0.75s disable
+                    if hasattr(player, 'flashbang_blind_timer'):
+                        player.flashbang_blind_timer = 30  # 0.5s whiteout
+        # Remove dead flashbangs
+        self.flashbangs = [fb for fb in self.flashbangs if fb['alive']]
 
     def draw_special_effect(self, x_offset):
-        """Draw grenade throw effect"""
-        if self.special_active:
-            # Draw throwing animation
-            throw_x = self.x - x_offset + 8
-            throw_y = self.y + 4
-            pyxel.pset(throw_x, throw_y, 8)
+        # Draw flashbangs
+        for fb in self.flashbangs:
+            if fb['alive']:
+                pyxel.blt(fb['x'] - x_offset - 4, fb['y'] - 4, 0, 0, 208, 8, 8, 14)
+            elif fb['exploded']:
+                # Draw flash
+                pyxel.circ(fb['x'] - x_offset, fb['y'], 20, 7)
+                pyxel.circ(fb['x'] - x_offset, fb['y'], 24, 7)
 class HumanEnemy3(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(6, x, y, level)
@@ -759,15 +866,15 @@ class HumanEnemy3(BaseEnemy):
         if self.special_active:
             # Draw camouflage overlay (semi-transparent)
             if self.facing_direction == 1:  # Right
-                pyxel.blt(self.x - x_offset, self.y, 0, 0, 80, 16, 16, 0)
+                pyxel.blt(self.x - x_offset, self.y, 0, 0, 80, 16, 16, 14)
             else:  # Left
-                pyxel.blt(self.x - x_offset, self.y, 0, 16, 80, 16, 16, 0)
+                pyxel.blt(self.x - x_offset, self.y, 0, 16, 80, 16, 16, 14)
 
 class HumanEnemy4(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(7, x, y, level)
         self.miss_chance = 0.1
-        self.special_ability = "Hacking (placeholder)"
+        self.special_ability = "Deploy Turret"
         self.hp = 20
         self.sprite_left = (0, 80)
         self.sprite_right = (16, 80)
@@ -775,7 +882,74 @@ class HumanEnemy4(BaseEnemy):
         self.sprite_damage_right = (48, 80)
         self.sprite_defeated_left = (64, 80)
         self.sprite_defeated_right = (80, 80)
+        # TODO Turret system: not really working now, need to fix
+        self.turrets = []  # List of turrets
+        self.turret_cooldown = 0
+        self.turret_cooldown_max = 600
 
+    def activate_special_ability(self, player):
+        """Deploy a turret near self"""
+        if self.turret_cooldown == 0 and len(self.turrets) < 2:
+            turret = {
+                'x': self.x + random.randint(-8, 8),
+                'y': self.y + 12,
+                'hp': 8,
+                'fire_timer': 0,
+                'fire_cooldown': 30,
+                'alive': True,
+                'bullets': []
+            }
+            self.turrets.append(turret)
+            self.turret_cooldown = self.turret_cooldown_max
+
+    def update_special_ability(self, player):
+        super().update_special_ability(player)
+        # Update turrets
+        for turret in self.turrets:
+            if not turret['alive']:
+                continue
+            # Fire at player
+            if turret['fire_timer'] <= 0:
+                dx = (player.x + 8) - turret['x']
+                dy = (player.y + 8) - turret['y']
+                angle = math.atan2(dy, dx)
+                speed = 5
+                vx = math.cos(angle) * speed
+                vy = math.sin(angle) * speed
+                bullet = {'x': turret['x'], 'y': turret['y'], 'vx': vx, 'vy': vy, 'alive': True}
+                turret['bullets'].append(bullet)
+                turret['fire_timer'] = turret['fire_cooldown']
+            else:
+                turret['fire_timer'] -= 1
+            # Update bullets
+            for bullet in turret['bullets']:
+                if not bullet['alive']:
+                    continue
+                bullet['x'] += bullet['vx']
+                bullet['y'] += bullet['vy']
+                # Out of bounds
+                if bullet['x'] < 0 or bullet['x'] > 2560 or bullet['y'] < 0 or bullet['y'] > 128:
+                    bullet['alive'] = False
+                # Hit player
+                if (player.x < bullet['x'] < player.x+16 and player.y < bullet['y'] < player.y+16):
+                    player.take_damage(2)
+                    bullet['alive'] = False
+            turret['bullets'] = [b for b in turret['bullets'] if b['alive']]
+        # Remove dead turrets
+        self.turrets = [t for t in self.turrets if t['alive']]
+        if self.turret_cooldown > 0:
+            self.turret_cooldown -= 1
+
+    def draw_special_effect(self, x_offset):
+        # Draw turrets
+        for turret in self.turrets:
+            if turret['alive']:
+                pyxel.blt(turret['x'] - x_offset, turret['y'], 0, 0, 216, 8, 8, 14)
+                pyxel.rectb(turret['x'] - x_offset, turret['y'] - 4, 8, 2, 8)  # Health bar
+                pyxel.rect(turret['x'] - x_offset, turret['y'] - 4, int(8 * turret['hp'] / 8), 2, 11)
+                for bullet in turret['bullets']:
+                    if bullet['alive']:
+                        pyxel.circ(bullet['x'] - x_offset, bullet['y'], 1, 10)
 class BossEnemy(BaseEnemy):
     def __init__(self, x, y, level=0):
         super().__init__(8, x, y, level)
@@ -876,6 +1050,9 @@ class BossEnemy(BaseEnemy):
         self._teleport_new_y = fy - 16
 
     def update(self, player, camera_x=0, enemies=None):
+        # if boss died 
+        if self.hp <= 0:
+            return 
         # Berserk logic
         if not self.berserk and self.hp < 500:
             self.berserk = True
@@ -1192,6 +1369,7 @@ class BossEnemy(BaseEnemy):
                 return True
         return False
 
+    # This function is deprecated 
     def wide_laser_intersects_player(self, x0, y0, x1, y1, player):
         # Check if player rectangle intersects a wide laser beam (width 12)
         px, py, pw, ph = player.x, player.y, 16, 16
@@ -1221,6 +1399,8 @@ def create_enemy(type_index, x, y, level=0):
         return HumanEnemy2(x, y, level)
     elif type_index == 6:
         return HumanEnemy3(x, y, level)
+    elif type_index == 7:
+        return HumanEnemy4(x, y, level)
     elif type_index == 8:
         return BossEnemy(x, y, level)
     else:

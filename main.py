@@ -59,7 +59,42 @@ class Neurotrace:
     def run(self):
         pyxel.run(self.update, self.draw)
 
+    def restart_game(self):
+        # Reset all game state for a fresh start
+        self.level = 0
+        self.GAME_STATUS.set_status(1)  # Set to playing
+        self.initPlayer()
+        self.initMap()
+        self.loadMap(self.level)
+        self.god_mode = False
+        self.infinite_ammo = False
+        self.door_open = False
+        self.debug_mode = True
+
     def update(self):
+        ## get camera offset 
+        self.camera_x, self.camera_y = self.camera.get_offset()
+        if self.GAME_STATUS.is_menu():
+            if pyxel.btnp(pyxel.KEY_SPACE):
+                self.GAME_STATUS.set_status(1)
+            return 
+
+        # if player dead 
+        if self.player.health <= 0:
+            self.GAME_STATUS.set_status(3)
+
+        # If boss is present and dead, set win status
+        for enemy in self.enemies:
+            if enemy.__class__.__name__ == "BossEnemy" and not enemy.alive:
+                self.GAME_STATUS.set_status(5)
+                return 
+
+        if self.GAME_STATUS.is_game_over() or self.GAME_STATUS.is_winning():
+            if pyxel.btnp(pyxel.KEY_R):
+                self.restart_game()
+            return 
+
+
         # Toggle debug mode with F3 Key
         if pyxel.btnp(pyxel.KEY_F3):
             self.debug_mode = not self.debug_mode
@@ -116,8 +151,7 @@ class Neurotrace:
         map_width = self.map.structure[self.level]["mapWH"][0]
         ## update the camera: to center the player, since player is 16*16, we need to move right and move down 8 (half of the player)
         self.camera.update(self.player.x + 8, self.player.y + 8, map_width)
-        ## get camera offset 
-        self.camera_x, self.camera_y = self.camera.get_offset()
+        
 
         # Fire control
         if pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT):
@@ -229,6 +263,16 @@ class Neurotrace:
         if self.GAME_STATUS.is_menu():
             ## show the game title 
             self.GAME_STATUS.showGameTitle()
+
+        elif self.GAME_STATUS.is_game_over():
+            self.GAME_STATUS.showGameOver()
+
+        elif self.GAME_STATUS.is_winning():
+            self.GAME_STATUS.showWinning()
+            if pyxel.btnp(pyxel.KEY_R):
+                self.restart_game()
+            return
+
         # if in the game 
         elif self.GAME_STATUS.is_playing():
             ## draw the game map (something needs to draw apart from the map itself (most interactable item) such as portal)
