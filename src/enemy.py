@@ -221,12 +221,18 @@ class BaseEnemy:
     def update(self, player, camera_x=0):
         """Base Enemy update logic"""
         if self.visual_state == "damage":
+            # Update damage visual state, enemies will flash red
             self.visual_state_timer -= 1
+            # Reset visual state after timer
             if self.visual_state_timer <= 0 and self.hp > 0:
+                # enemy visual state backs to normal 
                 self.visual_state = "normal"
         if self.visual_state == "defeated":
+            # Ignore if defeated 
             return
         if not self.alive:
+            # If not alive, do not update, make sure the enemy is dead 
+            # double check, make sure the visual state is not defeated but actually the enemy died 
             return
             
         # Update special ability
@@ -236,7 +242,7 @@ class BaseEnemy:
         self.update_grenades(player)
         
         distance_to_player = abs(player.x - self.x)
-        # Smarter AI: check for platform edge before moving
+        # AI logic: check for platform edge before moving
         def will_fall_off_platform(dx):
             next_x = self.x + dx
             for floor in self.structure[self.level]["mapFloor"]:
@@ -261,43 +267,64 @@ class BaseEnemy:
             attack_max = 60
             patrol_dist = 100
         # State machine for all weapons
+        ## patrol: move back and forth, chase: follow player, attack: shoot player, retreat: move away from player
+        ## patrol detect 
         if self.state == 'patrol':
+            ### if the player is close enough, which is inside the maximum attack range, switch to chase mode. 
             if distance_to_player < attack_max:
                 self.state = 'chase'
+            ### enemies randomly stop for a while before moving again
             elif self.stand_timer > 0:
                 self.is_moving = False
                 self.stand_timer -= 1
             else:
+                ### moving back and forth to simulate patrol 
                 self.is_moving = True
+                ### determine which direction 
                 dx = self.speed * self.patrol_dir
+                ### check if moving will fall off the platform, stopped if will 
                 if not will_fall_off_platform(dx):
+                    ### move the enemy 
                     self.x += dx
                     self.facing_direction = self.patrol_dir
+                ### if the enemy is out of patrol range, change direction and reset stand timer
                 if abs(self.x - self.patrol_origin) > self.patrol_range:
                     self.patrol_dir *= -1
                     self.stand_timer = random.randint(30, 90)
+
+        ## chase state 
         elif self.state == 'chase':
+            ### if player is too close, retreat
             if distance_to_player < retreat_dist:
                 self.state = 'retreat'
                 self.retreat_timer = random.randint(30, 60)
+            ### if player is in attack range, switch to attack state 
             elif attack_min <= distance_to_player < attack_max:
                 self.state = 'attack'
+            ### if player is too far, switch to patrol state 
             elif distance_to_player > patrol_dist:
                 self.state = 'patrol'
             else:
+                ### chase player, move towards player, will stop if player in attack range 
                 self.is_moving = True
                 dx = self.speed if player.x > self.x else -self.speed
                 if not will_fall_off_platform(dx):
                     self.x += dx
                     self.facing_direction = 1 if player.x > self.x else -1
+
+        ## attack state
         elif self.state == 'attack':
+            ### if player is too close, retreat
             if distance_to_player < retreat_dist:
                 self.state = 'retreat'
                 self.retreat_timer = random.randint(30, 60)
+            ### if player is too far, switch to chase state
             elif distance_to_player > attack_max:
                 self.state = 'chase'
             else:
-                self.is_moving = False
+                ### attack player, enemies should not move. 
+                self.is_moving = False 
+                ### recheck player position to determine facing direction 
                 self.facing_direction = 1 if player.x > self.x else -1
                 if self.attack_cooldown == 0:
                     self.fire(player, camera_x)
@@ -305,8 +332,12 @@ class BaseEnemy:
                 # Try to use special ability during attack
                 if random.random() < 0.1:  # 10% chance per frame during attack
                     self.use_special_ability(player)
+
+        ## retreat state
         elif self.state == 'retreat':
+            ### if retreat timer is up, switch back to patrol state
             if self.retreat_timer > 0:
+                ### keep retreating, moving opposite direction of player
                 self.is_moving = True
                 dx = -self.speed if player.x > self.x else self.speed
                 if not will_fall_off_platform(dx):
@@ -315,9 +346,13 @@ class BaseEnemy:
                 self.retreat_timer -= 1
             else:
                 self.state = 'patrol'
+
+        # Apply Gravity 
         self.velocity_y += self.gravity
         self.y += self.velocity_y
-        # Clamp enemy x position to map walls
+
+        # collision detection 
+        ## Clamp enemy x position to map walls
         map_walls = self.structure[self.level]["mapWall"]
         if len(map_walls) >= 2:
             left_wall = map_walls[0]
@@ -328,12 +363,17 @@ class BaseEnemy:
                 self.x = min_x
             if self.x > max_x:
                 self.x = max_x
-        # Clamp y to not fall below map
+        ## Clamp y to not fall below map (forced to ground)
+        ## protection: possibly block by checkFloorCollision first 
         map_height = self.structure[self.level]["mapWH"][1]
         if self.y > map_height:
             self.y = map_height
             self.velocity_y = 0
+
+        ## Check for floor collision, including the platforms 
         self.checkFloorCollision(self.level)
+
+        # Update firing logic 
         if self.is_firing:
             self.fire_timer -= 1
             if self.fire_timer <= 0:
@@ -341,13 +381,15 @@ class BaseEnemy:
                 self.fire_line = None
         if self.attack_cooldown > 0:
             self.attack_cooldown -= 1
+        
         # Update bullets
+        ## Same as player bullets logic 
         for bullet in self.bullets:
             if not bullet['alive']:
                 continue
             bullet['x'] += bullet['vx']
             bullet['y'] += bullet['vy']
-            # Remove if out of bounds
+            # Remove if out of bounds: x is 2560 and y is 128 (has to be full map because rendering in absolute) 
             if bullet['x'] < 0 or bullet['x'] > 2560 or bullet['y'] < 0 or bullet['y'] > 128:
                 bullet['alive'] = False
             # Bullet collision with map floors
@@ -372,45 +414,73 @@ class BaseEnemy:
                             bullet['alive'] = False
                 if not bullet['penetrate']:
                     bullet['alive'] = False
+        
+        # Remove dead bullets
         self.bullets = [b for b in self.bullets if b['alive']]
+
         # Sniper line damage
         if self.weapon == 'Sniper' and self.is_firing and self.fire_line:
             x0, y0, x1, y1 = self.fire_line
             if self.line_intersects_rect(x0, y0, x1, y1, player.x, player.y, 16, 16):
                 player.take_damage(5)
 
+    # Fire logic for enemies
     def fire(self, player, camera_x=0):
+        """Fire a bullet towards the player"""
+        # Only fire if not already firing
         if not self.is_firing:
             self.is_firing = True
             self.fire_timer = self.fire_duration
+            ## Calculate the angle towards the player, from the prospective of the enemy
             enemy_screen_x = self.x - camera_x + 8
             enemy_screen_y = self.y + 8
             player_screen_x = player.x - camera_x + 8
             player_screen_y = player.y + 8
-            # Lead shot: predict player position
+
+            # predict player position
+            ## get player velocity if exists, default to 0
             player_vx = getattr(player, 'velocity_x', 0) if hasattr(player, 'velocity_x') else 0
+            ## Estimated time it will take for a bullet to "catch up" to a moving player, in order to predict the player's future position
+            ### Determine how fast the player move, and based on that calculate the potential lead time, using 8 constant due to bullets are 8*8
             lead_time = 8 / max(1, abs(player_vx)) if player_vx != 0 else 0
+            ### Predict player's future position based on their velocity and lead time (only predict x position because y is too complex)
             predicted_x = player.x + player_vx * lead_time
+
+            ### calculate the angle towards the predicted player position
             angle = math.atan2(player_screen_y - enemy_screen_y, predicted_x - self.x)
+
+            ### there is miss chance for all enemies 
             if random.random() < self.miss_chance:
+                ### intentionally miss the shot
                 angle += random.uniform(-0.4, 0.4)
+
+            ### sniper is special, it will draw a line instead of firing a bullet
             if self.weapon == 'Sniper':
                 self.fire_angle = angle
                 self.fire_line = self.calculate_fire_line(angle)
             else:
+                # Fire a bullet
+                ## calculate bullet speed and color based on weapon type
                 speed = 8 if self.weapon == 'Rifle' else 5
                 color = 12 if self.weapon == 'Rifle' else 0
                 penetrate = True if self.weapon == 'Rifle' else False
+                ## Calculate bullet angle for both x and y
                 vx = math.cos(angle) * speed
                 vy = math.sin(angle) * speed
+
+                ## speed is twice as fast for rifle, so we need to adjust the bullet position
                 bx = self.x + 8 + vx * 2
                 by = self.y + 8 + vy * 2
+
+                ## Create bullet dictionary and append it to the collections to wait for rendering 
                 bullet = {'x': bx, 'y': by, 'vx': vx, 'vy': vy, 'color': color, 'penetrate': penetrate, 'alive': True}
                 if self.weapon == 'Rifle':
                     bullet['penetrate_count'] = 2
                 self.bullets.append(bullet)
 
     def calculate_fire_line(self, angle):
+        """Calculate the muzzle position and the end point of the sniper line"""
+        # same as player muzzle position, but with enemy position
         enemy_cx = self.x + 8
         enemy_cy = self.y + 8
         muzzle_x = int(enemy_cx + math.cos(angle) * 8)
@@ -431,6 +501,8 @@ class BaseEnemy:
         return (muzzle_x, muzzle_y, tx, ty)
 
     def checkFloorCollision(self, level):
+        """Check if the enemy is on a floor, and adjust position accordingly"""
+        # Check if the enemy is on a floor
         floors = self.structure[level]["mapFloor"]
         on_floor = False
         for floor in floors:
@@ -448,6 +520,10 @@ class BaseEnemy:
             self.is_jumping = True
 
     def draw(self, x_offset=0, target=None):
+        """
+        Draw the enemy on the screen
+        This method should not be overridden in subclasses, but can be extended
+        """
         if self.visual_state == "defeated":
             sx, sy = self.sprite_defeated_right if self.facing_direction == 1 else self.sprite_defeated_left
         elif self.visual_state == "damage":
