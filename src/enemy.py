@@ -134,7 +134,10 @@ class BaseEnemy:
         pass
 
     def update_special_ability(self, player):
-        """Update special ability effects"""
+        """
+        Update special ability effects
+        Only BossEnemy class should override this function
+        """
         if self.special_active:
             self.special_timer -= 1
             if self.special_timer <= 0:
@@ -185,7 +188,10 @@ class BaseEnemy:
             self.special_cooldown = self.special_cooldown_max
 
     def update_grenades(self, player):
-        """Update grenade physics and explosion"""
+        """
+        Update grenade physics and explosion
+        This function is deprecated
+        """
         for grenade in self.grenades[:]:
             if not grenade['alive']:
                 continue
@@ -213,6 +219,7 @@ class BaseEnemy:
                     player.take_damage(3)  # Grenade damage
 
     def update(self, player, camera_x=0):
+        """Base Enemy update logic"""
         if self.visual_state == "damage":
             self.visual_state_timer -= 1
             if self.visual_state_timer <= 0 and self.hp > 0:
